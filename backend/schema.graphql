@@ -1,0 +1,77 @@
+schema {
+  query: Query
+  mutation: Mutation
+}
+
+scalar Upload
+
+type Dataroom {
+  id: Int!
+  name: String!
+  createdAt: String!
+  updatedAt: String!
+}
+
+type Folder {
+  id: Int!
+  dataroomId: Int!
+  parentId: Int
+  name: String!
+  createdAt: String!
+  updatedAt: String!
+}
+
+type File {
+  id: Int!
+  dataroomId: Int!
+  folderId: Int
+  name: String!
+  size: Int!
+  contentType: String!
+  createdAt: String!
+  updatedAt: String!
+  downloadUrl: String!
+}
+
+type FolderContents {
+  folders: [Folder!]!
+  files: [File!]!
+}
+
+type SearchFileResult {
+  id: Int!
+  name: String!
+  dataroomId: Int!
+  folderId: Int
+  dataroomName: String!
+  folderName: String
+  updatedAt: String!
+  size: Int!
+}
+
+type SearchFilesResult {
+  items: [SearchFileResult!]!
+  total: Int!
+  hasMore: Boolean!
+}
+
+type Query {
+  datarooms: [Dataroom!]!
+  dataroom(id: Int!): Dataroom!
+  folderContents(dataroomId: Int!, parentId: Int, search: String): FolderContents!
+  folderBreadcrumb(folderId: Int!): [Folder!]!
+  file(id: Int!): File!
+  searchFiles(query: String!, offset: Int!, limit: Int!): SearchFilesResult!
+}
+
+type Mutation {
+  createDataroom(name: String!): Dataroom!
+  renameDataroom(id: Int!, name: String!): Dataroom!
+  deleteDataroom(id: Int!): Boolean!
+  createFolder(dataroomId: Int!, name: String!, parentId: Int): Folder!
+  renameFolder(id: Int!, name: String!): Folder!
+  deleteFolder(id: Int!): Boolean!
+  uploadFile(dataroomId: Int!, file: Upload!, folderId: Int, name: String): File!
+  renameFile(id: Int!, name: String!): File!
+  deleteFile(id: Int!): Boolean!
+}

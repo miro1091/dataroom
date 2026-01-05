@@ -1,0 +1,48 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: dataroom
+      POSTGRES_USER: dataroom
+      POSTGRES_PASSWORD: dataroom
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql+psycopg://dataroom:dataroom@db:5432/dataroom
+      REDIS_URL: redis://redis:6379/0
+      STORAGE_DIR: /app/storage
+      CORS_ORIGINS: http://localhost:5173
+      API_PREFIX: /api
+      AUTH_TOKEN: acme-dev-token
+      AUTH_USERNAME: acme
+      AUTH_PASSWORD: welcome123
+    volumes:
+      - ./backend/storage:/app/storage
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+      - redis
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: http://localhost:8000/api/graphql
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+
+volumes:
+  db_data:

@@ -1,0 +1,137 @@
+query Datarooms {
+  datarooms {
+    id
+    name
+    createdAt
+    updatedAt
+  }
+}
+
+query FolderContents($dataroomId: Int!, $parentId: Int, $search: String) {
+  folderContents(dataroomId: $dataroomId, parentId: $parentId, search: $search) {
+    folders {
+      id
+      dataroomId
+      parentId
+      name
+      createdAt
+      updatedAt
+    }
+    files {
+      id
+      dataroomId
+      folderId
+      name
+      size
+      contentType
+      createdAt
+      updatedAt
+      downloadUrl
+    }
+  }
+}
+
+query FolderBreadcrumb($folderId: Int!) {
+  folderBreadcrumb(folderId: $folderId) {
+    id
+    dataroomId
+    parentId
+    name
+    createdAt
+    updatedAt
+  }
+}
+
+mutation CreateDataroom($name: String!) {
+  createDataroom(name: $name) {
+    id
+    name
+    createdAt
+    updatedAt
+  }
+}
+
+mutation RenameDataroom($id: Int!, $name: String!) {
+  renameDataroom(id: $id, name: $name) {
+    id
+    name
+    createdAt
+    updatedAt
+  }
+}
+
+mutation DeleteDataroom($id: Int!) {
+  deleteDataroom(id: $id)
+}
+
+mutation CreateFolder($dataroomId: Int!, $name: String!, $parentId: Int) {
+  createFolder(dataroomId: $dataroomId, name: $name, parentId: $parentId) {
+    id
+    dataroomId
+    parentId
+    name
+    createdAt
+    updatedAt
+  }
+}
+
+mutation RenameFolder($id: Int!, $name: String!) {
+  renameFolder(id: $id, name: $name) {
+    id
+    dataroomId
+    parentId
+    name
+    createdAt
+    updatedAt
+  }
+}
+
+mutation DeleteFolder($id: Int!) {
+  deleteFolder(id: $id)
+}
+
+mutation UploadFile($dataroomId: Int!, $file: Upload!, $folderId: Int, $name: String) {
+  uploadFile(dataroomId: $dataroomId, file: $file, folderId: $folderId, name: $name) {
+    id
+    dataroomId
+    folderId
+    name
+    size
+    contentType
+    createdAt
+    updatedAt
+    downloadUrl
+  }
+}
+
+mutation RenameFile($id: Int!, $name: String!) {
+  renameFile(id: $id, name: $name) {
+    id
+    dataroomId
+    folderId
+    name
+    createdAt
+    updatedAt
+  }
+}
+
+mutation DeleteFile($id: Int!) {
+  deleteFile(id: $id)
+}
+
+query SearchFiles($query: String!, $offset: Int!, $limit: Int!) {
+  searchFiles(query: $query, offset: $offset, limit: $limit) {
+    total
+    hasMore
+    items {
+      id
+      name
+      dataroomId
+      folderId
+      dataroomName
+      folderName
+      updatedAt
+      size
+    }
+  }
+}
