@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from strawberry.file_uploads import Upload
 
-from .models import Dataroom, File, Folder
+from .models import Dataroom, File, Folder, User
 from .redis_client import cache_delete, cache_get, cache_set
 from .storage import UploadValidationError, delete_file, save_upload
 
@@ -54,45 +54,74 @@ def _file_dict(model: File) -> dict:
     }
 
 
-def _cache_key_datarooms() -> str:
-    return "datarooms:list"
+def _cache_key_datarooms(user_id: int) -> str:
+    return f"datarooms:user:{user_id}:list"
 
 
 def _cache_key_folder_contents(
-    dataroom_id: int, parent_id: Optional[int], search: Optional[str]
+    user_id: int, dataroom_id: int, parent_id: Optional[int], search: Optional[str]
 ) -> str:
     suffix = "root" if parent_id is None else str(parent_id)
     search_token = (search or "").strip().lower() or "all"
-    return f"dataroom:{dataroom_id}:folder:{suffix}:search:{search_token}"
+    return f"user:{user_id}:dataroom:{dataroom_id}:folder:{suffix}:search:{search_token}"
 
 
-def _invalidate_dataroom_cache() -> None:
-    cache_delete("datarooms:*")
+def _invalidate_dataroom_cache(user_id: int) -> None:
+    cache_delete(_cache_key_datarooms(user_id))
 
 
-def _invalidate_folder_cache(dataroom_id: int) -> None:
-    cache_delete(f"dataroom:{dataroom_id}:folder:*")
+def _invalidate_folder_cache(user_id: int, dataroom_id: int) -> None:
+    cache_delete(f"user:{user_id}:dataroom:{dataroom_id}:folder:*")
 
 
-def _get_dataroom(db: Session, dataroom_id: int) -> Dataroom:
-    dataroom = db.get(Dataroom, dataroom_id)
+def _get_dataroom(db: Session, dataroom_id: int, user_id: int) -> Dataroom:
+    dataroom = (
+        db.execute(
+            select(Dataroom).where(Dataroom.id == dataroom_id, Dataroom.user_id == user_id)
+        )
+        .scalars()
+        .first()
+    )
     if not dataroom:
         raise GraphQLError("Dataroom not found.")
     return dataroom
 
 
-def _get_folder(db: Session, folder_id: int) -> Folder:
-    folder = db.get(Folder, folder_id)
+def _get_folder(db: Session, folder_id: int, user_id: int) -> Folder:
+    folder = (
+        db.execute(
+            select(Folder)
+            .join(Dataroom, Folder.dataroom_id == Dataroom.id)
+            .where(Folder.id == folder_id, Dataroom.user_id == user_id)
+        )
+        .scalars()
+        .first()
+    )
     if not folder:
         raise GraphQLError("Folder not found.")
     return folder
 
 
-def _get_file(db: Session, file_id: int) -> File:
-    file = db.get(File, file_id)
+def _get_file(db: Session, file_id: int, user_id: int) -> File:
+    file = (
+        db.execute(
+            select(File)
+            .join(Dataroom, File.dataroom_id == Dataroom.id)
+            .where(File.id == file_id, Dataroom.user_id == user_id)
+        )
+        .scalars()
+        .first()
+    )
     if not file:
         raise GraphQLError("File not found.")
     return file
+
+
+def _get_user(info) -> User:
+    user = info.context.get("user")
+    if not user:
+        raise GraphQLError("Unauthorized.")
+    return user
 
 
 def _ensure_unique_folder_name(
@@ -199,20 +228,30 @@ class SearchFilesResultType:
 class Query:
     @strawberry.field
     def datarooms(self, info) -> List[DataroomType]:
-        cached = cache_get(_cache_key_datarooms())
+        user = _get_user(info)
+        cached = cache_get(_cache_key_datarooms(user.id))
         if cached is not None:
             return [DataroomType(**item) for item in cached]
 
         db: Session = info.context["db"]
-        datarooms = db.execute(select(Dataroom).order_by(Dataroom.created_at.desc())).scalars().all()
+        datarooms = (
+            db.execute(
+                select(Dataroom)
+                .where(Dataroom.user_id == user.id)
+                .order_by(Dataroom.created_at.desc())
+            )
+            .scalars()
+            .all()
+        )
         payload = [_dataroom_dict(item) for item in datarooms]
-        cache_set(_cache_key_datarooms(), payload)
+        cache_set(_cache_key_datarooms(user.id), payload)
         return [DataroomType(**item) for item in payload]
 
     @strawberry.field
     def dataroom(self, info, id: int) -> DataroomType:
         db: Session = info.context["db"]
-        dataroom = _get_dataroom(db, id)
+        user = _get_user(info)
+        dataroom = _get_dataroom(db, id, user.id)
         return DataroomType(**_dataroom_dict(dataroom))
 
     @strawberry.field
@@ -224,13 +263,15 @@ class Query:
         search: Optional[str] = None,
     ) -> FolderContentsType:
         db: Session = info.context["db"]
+        user = _get_user(info)
+        _get_dataroom(db, dataroom_id, user.id)
         if parent_id is not None:
-            folder = _get_folder(db, parent_id)
+            folder = _get_folder(db, parent_id, user.id)
             if folder.dataroom_id != dataroom_id:
                 raise GraphQLError("Folder does not belong to this dataroom.")
 
         search_term = (search or "").strip()
-        cache_key = _cache_key_folder_contents(dataroom_id, parent_id, search_term)
+        cache_key = _cache_key_folder_contents(user.id, dataroom_id, parent_id, search_term)
         cached = cache_get(cache_key)
         if cached is not None:
             return FolderContentsType(
@@ -268,7 +309,8 @@ class Query:
     @strawberry.field
     def folder_breadcrumb(self, info, folder_id: int) -> List[FolderType]:
         db: Session = info.context["db"]
-        folder = _get_folder(db, folder_id)
+        user = _get_user(info)
+        folder = _get_folder(db, folder_id, user.id)
         chain = []
         current = folder
         while current:
@@ -280,7 +322,8 @@ class Query:
     @strawberry.field
     def file(self, info, id: int) -> FileType:
         db: Session = info.context["db"]
-        file = _get_file(db, id)
+        user = _get_user(info)
+        file = _get_file(db, id, user.id)
         return FileType(**_file_dict(file))
 
     @strawberry.field
@@ -295,8 +338,13 @@ class Query:
         safe_offset = max(offset, 0)
 
         db: Session = info.context["db"]
+        user = _get_user(info)
         total = (
-            db.execute(select(func.count(File.id)).where(File.name.ilike(f"%{cleaned}%")))
+            db.execute(
+                select(func.count(File.id))
+                .join(Dataroom, File.dataroom_id == Dataroom.id)
+                .where(Dataroom.user_id == user.id, File.name.ilike(f"%{cleaned}%"))
+            )
             .scalar_one()
         )
 
@@ -305,7 +353,7 @@ class Query:
                 select(File, Dataroom.name, Folder.name)
                 .join(Dataroom, File.dataroom_id == Dataroom.id)
                 .outerjoin(Folder, File.folder_id == Folder.id)
-                .where(File.name.ilike(f"%{cleaned}%"))
+                .where(Dataroom.user_id == user.id, File.name.ilike(f"%{cleaned}%"))
                 .order_by(File.updated_at.desc(), File.name.asc())
                 .offset(safe_offset)
                 .limit(safe_limit)
@@ -339,11 +387,12 @@ class Mutation:
         if not cleaned:
             raise GraphQLError("Dataroom name is required.")
         db: Session = info.context["db"]
-        dataroom = Dataroom(name=cleaned)
+        user = _get_user(info)
+        dataroom = Dataroom(name=cleaned, user_id=user.id)
         db.add(dataroom)
         db.commit()
         db.refresh(dataroom)
-        _invalidate_dataroom_cache()
+        _invalidate_dataroom_cache(user.id)
         return DataroomType(**_dataroom_dict(dataroom))
 
     @strawberry.mutation
@@ -352,24 +401,26 @@ class Mutation:
         if not cleaned:
             raise GraphQLError("Dataroom name is required.")
         db: Session = info.context["db"]
-        dataroom = _get_dataroom(db, id)
+        user = _get_user(info)
+        dataroom = _get_dataroom(db, id, user.id)
         dataroom.name = cleaned
         db.commit()
         db.refresh(dataroom)
-        _invalidate_dataroom_cache()
+        _invalidate_dataroom_cache(user.id)
         return DataroomType(**_dataroom_dict(dataroom))
 
     @strawberry.mutation
     def delete_dataroom(self, info, id: int) -> bool:
         db: Session = info.context["db"]
-        dataroom = _get_dataroom(db, id)
+        user = _get_user(info)
+        dataroom = _get_dataroom(db, id, user.id)
         files = db.execute(select(File).where(File.dataroom_id == id)).scalars().all()
         for file in files:
             delete_file(file.storage_path)
         db.delete(dataroom)
         db.commit()
-        _invalidate_dataroom_cache()
-        _invalidate_folder_cache(id)
+        _invalidate_dataroom_cache(user.id)
+        _invalidate_folder_cache(user.id, id)
         return True
 
     @strawberry.mutation
@@ -380,9 +431,10 @@ class Mutation:
         if not cleaned:
             raise GraphQLError("Folder name is required.")
         db: Session = info.context["db"]
-        _get_dataroom(db, dataroom_id)
+        user = _get_user(info)
+        _get_dataroom(db, dataroom_id, user.id)
         if parent_id is not None:
-            parent = _get_folder(db, parent_id)
+            parent = _get_folder(db, parent_id, user.id)
             if parent.dataroom_id != dataroom_id:
                 raise GraphQLError("Parent folder does not belong to this dataroom.")
         _ensure_unique_folder_name(db, dataroom_id, parent_id, cleaned)
@@ -394,7 +446,7 @@ class Mutation:
             db.rollback()
             raise GraphQLError("Unable to create folder with that name.")
         db.refresh(folder)
-        _invalidate_folder_cache(dataroom_id)
+        _invalidate_folder_cache(user.id, dataroom_id)
         return FolderType(**_folder_dict(folder))
 
     @strawberry.mutation
@@ -403,18 +455,20 @@ class Mutation:
         if not cleaned:
             raise GraphQLError("Folder name is required.")
         db: Session = info.context["db"]
-        folder = _get_folder(db, id)
+        user = _get_user(info)
+        folder = _get_folder(db, id, user.id)
         _ensure_unique_folder_name(db, folder.dataroom_id, folder.parent_id, cleaned, id)
         folder.name = cleaned
         db.commit()
         db.refresh(folder)
-        _invalidate_folder_cache(folder.dataroom_id)
+        _invalidate_folder_cache(user.id, folder.dataroom_id)
         return FolderType(**_folder_dict(folder))
 
     @strawberry.mutation
     def delete_folder(self, info, id: int) -> bool:
         db: Session = info.context["db"]
-        folder = _get_folder(db, id)
+        user = _get_user(info)
+        folder = _get_folder(db, id, user.id)
         dataroom_id = folder.dataroom_id
         folder_ids = _collect_descendant_folder_ids(db, id)
         files = db.execute(select(File).where(File.folder_id.in_(folder_ids))).scalars().all()
@@ -425,7 +479,7 @@ class Mutation:
             if target:
                 db.delete(target)
         db.commit()
-        _invalidate_folder_cache(dataroom_id)
+        _invalidate_folder_cache(user.id, dataroom_id)
         return True
 
     @strawberry.mutation
@@ -438,9 +492,10 @@ class Mutation:
         name: Optional[str] = None,
     ) -> FileType:
         db: Session = info.context["db"]
-        _get_dataroom(db, dataroom_id)
+        user = _get_user(info)
+        _get_dataroom(db, dataroom_id, user.id)
         if folder_id is not None:
-            folder = _get_folder(db, folder_id)
+            folder = _get_folder(db, folder_id, user.id)
             if folder.dataroom_id != dataroom_id:
                 raise GraphQLError("Folder does not belong to this dataroom.")
         incoming_name = (name or file.filename or "document.pdf").strip()
@@ -469,7 +524,7 @@ class Mutation:
             delete_file(storage_path)
             raise GraphQLError("Unable to upload file with that name.")
         db.refresh(record)
-        _invalidate_folder_cache(dataroom_id)
+        _invalidate_folder_cache(user.id, dataroom_id)
         return FileType(**_file_dict(record))
 
     @strawberry.mutation
@@ -478,23 +533,25 @@ class Mutation:
         if not cleaned:
             raise GraphQLError("File name is required.")
         db: Session = info.context["db"]
-        record = _get_file(db, id)
+        user = _get_user(info)
+        record = _get_file(db, id, user.id)
         _ensure_unique_file_name(db, record.dataroom_id, record.folder_id, cleaned, id)
         record.name = cleaned
         db.commit()
         db.refresh(record)
-        _invalidate_folder_cache(record.dataroom_id)
+        _invalidate_folder_cache(user.id, record.dataroom_id)
         return FileType(**_file_dict(record))
 
     @strawberry.mutation
     def delete_file(self, info, id: int) -> bool:
         db: Session = info.context["db"]
-        record = _get_file(db, id)
+        user = _get_user(info)
+        record = _get_file(db, id, user.id)
         dataroom_id = record.dataroom_id
         delete_file(record.storage_path)
         db.delete(record)
         db.commit()
-        _invalidate_folder_cache(dataroom_id)
+        _invalidate_folder_cache(user.id, dataroom_id)
         return True
 
 

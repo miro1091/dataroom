@@ -9,8 +9,10 @@ from .db import Base
 
 class Dataroom(Base):
     __tablename__ = "datarooms"
+    __table_args__ = (Index("ix_datarooms_user_id", "user_id"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -24,6 +26,23 @@ class Dataroom(Base):
     )
     files: Mapped[List["File"]] = relationship(
         back_populates="dataroom", cascade="all, delete-orphan"
+    )
+    user: Mapped["User"] = relationship(back_populates="datarooms")
+
+
+class User(Base):
+    __tablename__ = "users"
+    __table_args__ = (UniqueConstraint("username", name="uq_users_username"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    username: Mapped[str] = mapped_column(String(150), nullable=False)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    datarooms: Mapped[List["Dataroom"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
     )
 
 

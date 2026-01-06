@@ -13,9 +13,9 @@ class Settings(BaseSettings):
     api_prefix: str = Field(default="/api")
     cors_origins: str = Field(default="http://localhost:5173")
     max_upload_mb: int = Field(default=25)
-    auth_token: str = Field(default="acme-dev-token")
-    auth_username: str = Field(default="acme")
-    auth_password: str = Field(default="welcome123")
+    jwt_secret: str = Field(default="change-me-in-prod")
+    jwt_algorithm: str = Field(default="HS256")
+    jwt_expires_minutes: int = Field(default=120)
 
 
 settings = Settings()

@@ -6,3 +6,4 @@ const basePath = parsed.pathname.replace(/\/graphql\/?$/, '')
 
 export const API_BASE_URL = `${parsed.origin}${basePath}`
 export const API_LOGIN_URL = `${API_BASE_URL}/auth/login`
+export const API_REGISTER_URL = `${API_BASE_URL}/auth/register`

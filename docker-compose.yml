@@ -23,9 +23,8 @@ services:
       STORAGE_DIR: /app/storage
       CORS_ORIGINS: http://localhost:5173
       API_PREFIX: /api
-      AUTH_TOKEN: acme-dev-token
-      AUTH_USERNAME: acme
-      AUTH_PASSWORD: welcome123
+      JWT_SECRET: change-me-in-prod
+      JWT_EXPIRES_MINUTES: "120"
     volumes:
       - ./backend/storage:/app/storage
     ports:

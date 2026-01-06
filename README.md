@@ -49,10 +49,11 @@ npm run dev
 Open `http://localhost:5173`.
 
 ## Authentication
-This app uses a simple token-based gate.
-- Default credentials (local/dev): `acme` / `welcome123`
-- Change them in `backend/.env` or `docker-compose.yml` via `AUTH_USERNAME` and `AUTH_PASSWORD`
-- The UI exchanges credentials for a token on first load
+This app uses JWT authentication with a username/password flow.
+- Register or sign in in the UI to receive a JWT stored in local storage
+- The token is sent with every GraphQL request and file download
+- Configure `JWT_SECRET` and `JWT_EXPIRES_MINUTES` in `backend/.env` or `docker-compose.yml`
+- Datarooms are scoped per user; each account only sees its own rooms
 ## Docker
 ```bash
 docker compose up --build

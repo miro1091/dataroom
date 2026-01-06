@@ -8,7 +8,7 @@ import { Sidebar } from './components/Sidebar'
 import { Topbar } from './components/Topbar'
 import { useAuthToken } from './hooks/useAuthToken'
 import { useDataroomState } from './hooks/useDataroomState'
-import { requestToken } from './utils/authApi'
+import { requestRegister, requestToken } from './utils/authApi'
 import type { AuthCredentials } from './types/auth'
 
 const AppShell = ({ token, onSignOut }: { token: string; onSignOut: () => void }) => {
@@ -264,17 +264,33 @@ const AppShell = ({ token, onSignOut }: { token: string; onSignOut: () => void }
 
 function App() {
   const { token, setToken, clearToken } = useAuthToken()
+  const client = useApolloClient()
 
-  const handleLogin = async (values: AuthCredentials) => {
+  const handleAuth = async (values: AuthCredentials, mode: 'login' | 'register') => {
+    if (mode === 'register') {
+      await requestRegister(values)
+      return
+    }
     const authToken = await requestToken(values)
     setToken(authToken)
+    try {
+      await client.clearStore()
+    } catch {
+      // ignore cache reset failures
+    }
+  }
+
+  const handleSignOut = () => {
+    clearToken()
+    void client.clearStore()
   }
 
   if (!token) {
-    return <AuthGate onSubmit={handleLogin} />
+    return <AuthGate onSubmit={handleAuth} />
   }
 
-  return <AppShell token={token} onSignOut={clearToken} />
+  return <AppShell token={token} onSignOut={handleSignOut} />
 }
 
 export default App
+import { useApolloClient } from '@apollo/client'
