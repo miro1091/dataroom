@@ -3,6 +3,7 @@ import { BUTTONS } from './constants/ui'
 import { AuthGate } from './components/AuthGate'
 import { DialogModal } from './components/DialogModal'
 import { DataroomView } from './components/DataroomView'
+import { PdfPreview } from './components/PdfPreview'
 import { SearchDropdown } from './components/SearchDropdown'
 import { Sidebar } from './components/Sidebar'
 import { Topbar } from './components/Topbar'
@@ -167,6 +168,9 @@ const AppShell = ({ token, onSignOut }: { token: string; onSignOut: () => void }
       </button>
     </div>
   )
+  const previewNode = (
+    <PdfPreview file={selectedFile} token={token} onDownload={downloadFile} />
+  )
 
   return (
     <div className="relative min-h-screen px-4 py-7 sm:px-6 lg:px-10">
@@ -237,10 +241,10 @@ const AppShell = ({ token, onSignOut }: { token: string; onSignOut: () => void }
                 onSelectFile={(file) => {
                   setSelectedFile(file)
                   setHighlightFileId(null)
-                  void downloadFile(file)
                 }}
                 onRenameFile={openRenameFile}
                 onDeleteFile={openDeleteFile}
+                preview={previewNode}
               />
             )}
           </main>

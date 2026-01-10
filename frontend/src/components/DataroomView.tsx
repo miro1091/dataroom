@@ -1,4 +1,4 @@
-import type { ChangeEvent } from 'react'
+import type { ChangeEvent, ReactNode } from 'react'
 import type { ApiDataroom, ApiFile, ApiFolder } from '../types/graphql'
 import { BUTTONS } from '../constants/ui'
 import { Breadcrumbs } from './Breadcrumbs'
@@ -24,6 +24,7 @@ type DataroomViewProps = {
   onSelectFile: (file: ApiFile) => void
   onRenameFile: (file: ApiFile) => void
   onDeleteFile: (file: ApiFile) => void
+  preview: ReactNode
 }
 
 export const DataroomView = ({
@@ -45,6 +46,7 @@ export const DataroomView = ({
   onSelectFile,
   onRenameFile,
   onDeleteFile,
+  preview,
 }: DataroomViewProps) => {
   return (
     <div className="flex flex-col gap-6">
@@ -90,14 +92,17 @@ export const DataroomView = ({
             <div className="mb-3 font-sans text-xs font-semibold uppercase tracking-[0.2em] text-muted">
               Files
             </div>
-            <FileList
-              files={files}
-              selectedFileId={selectedFile?.id ?? null}
-              highlightFileId={highlightFileId}
-              onSelect={onSelectFile}
-              onRename={onRenameFile}
-              onDelete={onDeleteFile}
-            />
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
+              <FileList
+                files={files}
+                selectedFileId={selectedFile?.id ?? null}
+                highlightFileId={highlightFileId}
+                onSelect={onSelectFile}
+                onRename={onRenameFile}
+                onDelete={onDeleteFile}
+              />
+              {preview}
+            </div>
           </div>
         </section>
       )}

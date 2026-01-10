@@ -17,3 +17,5 @@ frontend/dist/
 # Storage uploads
 backend/storage/*
 !backend/storage/.gitkeep
+
+.idea
