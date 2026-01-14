@@ -10,6 +10,7 @@ export type DialogState =
       label: string
       confirmLabel: string
       defaultValue?: string
+      maxLength?: number
       onConfirm: (value: string) => Promise<void>
     }
   | {

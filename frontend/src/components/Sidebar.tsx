@@ -58,12 +58,17 @@ export const Sidebar = ({
               }`}
             >
               <button
-                className="flex-1 text-left"
+                className="min-w-0 flex-1 text-left"
                 onClick={() => {
                   onSelect(room.id)
                 }}
               >
-                <span className="block font-sans text-sm font-semibold text-ink">{room.name}</span>
+                <span
+                  className="block truncate font-sans text-sm font-semibold text-ink"
+                  title={room.name}
+                >
+                  {room.name}
+                </span>
                 <span className="block text-xs text-muted">
                   Updated {new Date(room.updatedAt).toLocaleDateString()}
                 </span>

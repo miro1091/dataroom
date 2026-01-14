@@ -1,20 +1,13 @@
 import type { ReactNode } from 'react'
-import type { Notice } from '../types/ui'
 import { BUTTONS } from '../constants/ui'
 
 type TopbarProps = {
-  notice: Notice | null
   onCreate: () => void
   search?: ReactNode
   auth?: ReactNode
 }
 
-export const Topbar = ({ notice, onCreate, search, auth }: TopbarProps) => {
-  const noticeStyles =
-    notice?.type === 'error'
-      ? 'bg-[rgba(175,63,45,0.12)] text-[#a33d2e]'
-      : 'bg-[rgba(216,107,77,0.15)] text-accent-dark'
-
+export const Topbar = ({ onCreate, search, auth }: TopbarProps) => {
   return (
     <header className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
       <div className="flex items-center gap-4">
@@ -34,13 +27,7 @@ export const Topbar = ({ notice, onCreate, search, auth }: TopbarProps) => {
       <div className="flex flex-wrap items-center gap-4">
         {search ?? null}
         {auth ?? null}
-        {notice ? (
-          <div className={`rounded-full px-3 py-1.5 text-sm font-medium ${noticeStyles}`}>
-            {notice.message}
-          </div>
-        ) : (
-          <span className="text-sm text-muted">Trusted for sensitive acquisitions</span>
-        )}
+        <span className="text-sm text-muted">Trusted for sensitive acquisitions</span>
         <button className={BUTTONS.primary} onClick={onCreate}>
           New dataroom
         </button>

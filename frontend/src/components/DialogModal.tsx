@@ -39,6 +39,7 @@ export const DialogModal = ({
                 value={value}
                 onChange={(event) => onChange(event.target.value)}
                 placeholder="Type a name"
+                maxLength={dialog.maxLength}
                 autoFocus
               />
             </label>

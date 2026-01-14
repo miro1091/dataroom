@@ -3,6 +3,7 @@ import { BUTTONS } from './constants/ui'
 import { AuthGate } from './components/AuthGate'
 import { DialogModal } from './components/DialogModal'
 import { DataroomView } from './components/DataroomView'
+import { NoticeToast } from './components/NoticeToast'
 import { PdfPreview } from './components/PdfPreview'
 import { SearchDropdown } from './components/SearchDropdown'
 import { Sidebar } from './components/Sidebar'
@@ -83,6 +84,7 @@ const AppShell = ({ token, onSignOut }: { token: string; onSignOut: () => void }
       title: 'Create dataroom',
       label: 'Dataroom name',
       confirmLabel: 'Create',
+      maxLength: 30,
       onConfirm: handleCreateDataroom,
     })
 
@@ -93,6 +95,7 @@ const AppShell = ({ token, onSignOut }: { token: string; onSignOut: () => void }
       label: 'New name',
       confirmLabel: 'Save',
       defaultValue: room.name,
+      maxLength: 30,
       onConfirm: (value) => handleRenameDataroom(room, value),
     })
 
@@ -111,6 +114,7 @@ const AppShell = ({ token, onSignOut }: { token: string; onSignOut: () => void }
       title: 'Create folder',
       label: 'Folder name',
       confirmLabel: 'Create',
+      maxLength: 30,
       onConfirm: handleCreateFolder,
     })
 
@@ -121,6 +125,7 @@ const AppShell = ({ token, onSignOut }: { token: string; onSignOut: () => void }
       label: 'New name',
       confirmLabel: 'Save',
       defaultValue: folder.name,
+      maxLength: 30,
       onConfirm: (value) => handleRenameFolder(folder, value),
     })
 
@@ -140,6 +145,7 @@ const AppShell = ({ token, onSignOut }: { token: string; onSignOut: () => void }
       label: 'New name',
       confirmLabel: 'Save',
       defaultValue: file.name,
+      maxLength: 30,
       onConfirm: (value) => handleRenameFile(file, value),
     })
 
@@ -177,7 +183,6 @@ const AppShell = ({ token, onSignOut }: { token: string; onSignOut: () => void }
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_70%_20%,rgba(216,107,77,0.12),transparent_45%)]" />
       <div className="relative z-10 flex flex-col gap-6">
         <Topbar
-          notice={notice}
           onCreate={openCreateDataroom}
           search={<SearchDropdown onSelect={handleSearchSelect} />}
           auth={authNode}
@@ -262,6 +267,7 @@ const AppShell = ({ token, onSignOut }: { token: string; onSignOut: () => void }
           onConfirm={handleDialogConfirm}
         />
       ) : null}
+      <NoticeToast notice={notice} />
     </div>
   )
 }

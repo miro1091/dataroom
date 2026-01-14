@@ -115,10 +115,16 @@ export const PdfPreview = ({ file, token, onDownload }: PdfPreviewProps) => {
   return (
     <div className="flex h-full flex-col gap-4 rounded-xl border border-border bg-white/70 p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
+        <div className="min-w-0 flex-1">
           <div className="text-xs font-semibold uppercase tracking-[0.2em] text-muted">Preview</div>
           <div className="font-sans text-sm font-semibold text-ink">
-            {file ? file.name : 'Select a PDF to preview'}
+            {file ? (
+              <span className="block truncate" title={file.name}>
+                {file.name}
+              </span>
+            ) : (
+              'Select a PDF to preview'
+            )}
           </div>
           <div className="text-xs text-muted">{details ?? 'PDF previews render inside the room.'}</div>
         </div>

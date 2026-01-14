@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent } from 'react'
 import {
   useCreateDataroomMutation,
@@ -17,7 +17,7 @@ import {
 import type { ApiDataroom, ApiFile, ApiFolder } from '../types/graphql'
 import type { DialogState, Notice } from '../types/ui'
 import { NOTICE_TIMEOUT_MS } from '../constants/ui'
-import { getErrorMessage } from '../utils/errors'
+import { getErrorMessage, getGraphQLErrorMessage } from '../utils/errors'
 
 export const useDataroomState = () => {
   const { data: dataroomData, loading: dataroomLoading, error: dataroomError, refetch: refetchDatarooms } =
@@ -33,6 +33,19 @@ export const useDataroomState = () => {
   const [dialogValue, setDialogValue] = useState('')
   const [dialogBusy, setDialogBusy] = useState(false)
   const [dialogError, setDialogError] = useState('')
+  const lastQueryErrorRef = useRef<string | null>(null)
+
+  const normalizeName = (name: string) => name.trim().toLowerCase()
+  const ensureUniqueName = (items: Array<{ id: number; name: string }>, name: string, currentId?: number) => {
+    const normalized = normalizeName(name)
+    if (!normalized) return
+    const duplicate = items.some(
+      (item) => item.id !== currentId && normalizeName(item.name) === normalized
+    )
+    if (duplicate) {
+      throw new Error('A folder or dataroom with this name already exists.')
+    }
+  }
 
   const { data: contentsData, loading: contentsLoading, error: contentsError, refetch: refetchContents } =
     useFolderContentsQuery({
@@ -90,6 +103,18 @@ export const useDataroomState = () => {
   }, [notice])
 
   useEffect(() => {
+    const queryError = dataroomError ?? contentsError
+    if (!queryError) {
+      lastQueryErrorRef.current = null
+      return
+    }
+    const message = getGraphQLErrorMessage(queryError)
+    if (!message || message === lastQueryErrorRef.current) return
+    lastQueryErrorRef.current = message
+    setNotice({ type: 'error', message })
+  }, [contentsError, dataroomError])
+
+  useEffect(() => {
     if (dialog?.kind === 'input') {
       setDialogValue(dialog.defaultValue ?? '')
     }
@@ -117,7 +142,12 @@ export const useDataroomState = () => {
       }
       setDialog(null)
     } catch (err) {
-      setDialogError(getErrorMessage(err))
+      const graphQLError = getGraphQLErrorMessage(err)
+      if (graphQLError) {
+        setNotice({ type: 'error', message: graphQLError })
+      } else {
+        setDialogError(getErrorMessage(err))
+      }
     } finally {
       setDialogBusy(false)
     }
@@ -125,6 +155,7 @@ export const useDataroomState = () => {
 
   const handleCreateDataroom = async (name: string) => {
     if (!name) throw new Error('Name is required.')
+    ensureUniqueName(datarooms, name)
     const result = await createDataroom({ variables: { name } })
     await refetchDatarooms()
     const created = result.data?.createDataroom
@@ -137,6 +168,7 @@ export const useDataroomState = () => {
 
   const handleRenameDataroom = async (room: ApiDataroom, name: string) => {
     if (!name) throw new Error('Name is required.')
+    ensureUniqueName(datarooms, name, room.id)
     await renameDataroom({ variables: { id: room.id, name } })
     await refetchDatarooms()
     setNotice({ type: 'success', message: 'Dataroom renamed.' })
@@ -151,6 +183,7 @@ export const useDataroomState = () => {
   const handleCreateFolder = async (name: string) => {
     if (!selectedDataroomId) throw new Error('Select a dataroom first.')
     if (!name) throw new Error('Name is required.')
+    ensureUniqueName(folders, name)
     await createFolder({
       variables: { dataroomId: selectedDataroomId, parentId: currentFolderId, name },
     })
@@ -160,6 +193,7 @@ export const useDataroomState = () => {
 
   const handleRenameFolder = async (folder: ApiFolder, name: string) => {
     if (!name) throw new Error('Name is required.')
+    ensureUniqueName(folders, name, folder.id)
     await renameFolder({ variables: { id: folder.id, name } })
     await refetchContents()
     setNotice({ type: 'success', message: 'Folder renamed.' })

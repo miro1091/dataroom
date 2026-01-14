@@ -143,8 +143,10 @@ export const SearchDropdown = ({ onSelect }: SearchDropdownProps) => {
                 className="w-full rounded-lg border border-transparent px-3 py-2 text-left text-sm text-ink transition hover:border-border hover:bg-accent/10"
                 onMouseDown={() => handleSelect(item)}
               >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-sans text-sm font-semibold">{item.name}</span>
+                <div className="flex min-w-0 items-center justify-between gap-2">
+                  <span className="min-w-0 truncate font-sans text-sm font-semibold" title={item.name}>
+                    {item.name}
+                  </span>
                   <span className="text-xs text-muted">
                     {new Date(item.updatedAt).toLocaleDateString()}
                   </span>

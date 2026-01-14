@@ -38,9 +38,14 @@ export const FileList = ({
               isActive ? 'border-accent/40 shadow-md' : 'border-border'
             }`}
           >
-            <button className="flex items-center gap-3 text-left" onClick={() => onSelect(file)}>
+            <button className="flex min-w-0 items-center gap-3 text-left" onClick={() => onSelect(file)}>
               <span className="text-lg">📄</span>
-              <span className="font-sans text-sm font-semibold text-ink">{file.name}</span>
+              <span
+                className="min-w-0 flex-1 truncate font-sans text-sm font-semibold text-ink"
+                title={file.name}
+              >
+                {file.name}
+              </span>
               <span className="rounded-full bg-black/5 px-2 py-0.5 text-xs text-ink">
                 {formatSize(file.size)}
               </span>
