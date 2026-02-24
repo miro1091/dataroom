@@ -7,27 +7,15 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .db import Base
 
 
-class Dataroom(Base):
-    __tablename__ = "datarooms"
-    __table_args__ = (Index("ix_datarooms_user_id", "user_id"),)
+class TimestampedMixin:
+    """Shared timestamp columns for all mutable entities."""
 
-    id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
-
-    folders: Mapped[List["Folder"]] = relationship(
-        back_populates="dataroom", cascade="all, delete-orphan"
-    )
-    files: Mapped[List["File"]] = relationship(
-        back_populates="dataroom", cascade="all, delete-orphan"
-    )
-    user: Mapped["User"] = relationship(back_populates="datarooms")
 
 
 class User(Base):
@@ -46,7 +34,24 @@ class User(Base):
     )
 
 
-class Folder(Base):
+class Dataroom(TimestampedMixin, Base):
+    __tablename__ = "datarooms"
+    __table_args__ = (Index("ix_datarooms_user_id", "user_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+
+    user: Mapped["User"] = relationship(back_populates="datarooms")
+    folders: Mapped[List["Folder"]] = relationship(
+        back_populates="dataroom", cascade="all, delete-orphan"
+    )
+    files: Mapped[List["File"]] = relationship(
+        back_populates="dataroom", cascade="all, delete-orphan"
+    )
+
+
+class Folder(TimestampedMixin, Base):
     __tablename__ = "folders"
     __table_args__ = (
         UniqueConstraint("dataroom_id", "parent_id", "name", name="uq_folder_parent_name"),
@@ -58,12 +63,6 @@ class Folder(Base):
     dataroom_id: Mapped[int] = mapped_column(ForeignKey("datarooms.id"), nullable=False)
     parent_id: Mapped[Optional[int]] = mapped_column(ForeignKey("folders.id"))
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
-    )
 
     dataroom: Mapped["Dataroom"] = relationship(back_populates="folders")
     parent: Mapped[Optional["Folder"]] = relationship(
@@ -77,7 +76,7 @@ class Folder(Base):
     )
 
 
-class File(Base):
+class File(TimestampedMixin, Base):
     __tablename__ = "files"
     __table_args__ = (
         UniqueConstraint("dataroom_id", "folder_id", "name", name="uq_file_folder_name"),
@@ -92,12 +91,6 @@ class File(Base):
     storage_path: Mapped[str] = mapped_column(String(512), nullable=False)
     content_type: Mapped[str] = mapped_column(String(100), nullable=False)
     size: Mapped[int] = mapped_column(nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
-    )
 
     dataroom: Mapped["Dataroom"] = relationship(back_populates="files")
     folder: Mapped[Optional["Folder"]] = relationship(back_populates="files")

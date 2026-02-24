@@ -1,5 +1,14 @@
+import {
+  Alert,
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  TextField,
+  Typography,
+} from '@mui/material'
 import type { DialogState } from '../types/ui'
-import { BUTTONS } from '../constants/ui'
 
 type DialogModalProps = {
   dialog: DialogState
@@ -21,46 +30,39 @@ export const DialogModal = ({
   onConfirm,
 }: DialogModalProps) => {
   return (
-    <div className="fixed inset-0 z-10 grid place-items-center bg-black/40 px-4" role="dialog" aria-modal="true">
-      <div className="flex w-full max-w-md flex-col gap-4 rounded-2xl border border-border bg-surface p-5 shadow-soft">
-        <div className="flex items-center justify-between gap-3">
-          <h3 className="font-sans text-base font-semibold text-ink">{dialog.title}</h3>
-          <button className={BUTTONS.icon} onClick={onClose} aria-label="Close dialog">
-            ✕
-          </button>
-        </div>
-
+    <Dialog open onClose={busy ? undefined : onClose} fullWidth maxWidth="xs">
+      <DialogTitle>{dialog.title}</DialogTitle>
+      <DialogContent sx={{ pt: 1 }}>
         {dialog.kind === 'input' ? (
-          <div className="flex flex-col gap-3">
-            <label className="flex flex-col gap-2 text-sm text-ink">
-              <span>{dialog.label}</span>
-              <input
-                className="rounded-lg border border-border bg-[#fffaf4] px-3 py-2"
-                value={value}
-                onChange={(event) => onChange(event.target.value)}
-                placeholder="Type a name"
-                maxLength={dialog.maxLength}
-                autoFocus
-              />
-            </label>
-            {error ? <div className="text-xs text-[#a33d2e]">{error}</div> : null}
-          </div>
+          <TextField
+            autoFocus
+            margin="dense"
+            label={dialog.label}
+            fullWidth
+            size="small"
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+            inputProps={{ maxLength: dialog.maxLength }}
+          />
         ) : (
-          <div className="flex flex-col gap-3">
-            <p className="text-sm text-muted">{dialog.description}</p>
-            {error ? <div className="text-xs text-[#a33d2e]">{error}</div> : null}
-          </div>
+          <Typography variant="body2" color="text.secondary">
+            {dialog.description}
+          </Typography>
         )}
-
-        <div className="flex flex-wrap justify-end gap-3">
-          <button className={BUTTONS.outline} onClick={onClose} disabled={busy}>
-            Cancel
-          </button>
-          <button className={BUTTONS.primary} onClick={onConfirm} disabled={busy}>
-            {dialog.confirmLabel}
-          </button>
-        </div>
-      </div>
-    </div>
+        {error ? (
+          <Alert severity="error" sx={{ mt: 2 }}>
+            {error}
+          </Alert>
+        ) : null}
+      </DialogContent>
+      <DialogActions sx={{ p: 2 }}>
+        <Button onClick={onClose} disabled={busy}>
+          Cancel
+        </Button>
+        <Button onClick={onConfirm} variant="contained" disabled={busy}>
+          {dialog.confirmLabel}
+        </Button>
+      </DialogActions>
+    </Dialog>
   )
 }

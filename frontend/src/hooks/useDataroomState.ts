@@ -19,13 +19,48 @@ import type { DialogState, Notice } from '../types/ui'
 import { NOTICE_TIMEOUT_MS } from '../constants/ui'
 import { getErrorMessage, getGraphQLErrorMessage } from '../utils/errors'
 
+const parseNullableInt = (value: string | null): number | null => {
+  if (!value) return null
+  const parsed = Number.parseInt(value, 10)
+  return Number.isNaN(parsed) ? null : parsed
+}
+
+const parseLocationPath = (pathname: string) => {
+  const segments = pathname.split('/').filter(Boolean)
+  if (segments.length < 2 || segments[0] !== 'datarooms') {
+    return { dataroomId: null as number | null, folderId: null as number | null }
+  }
+
+  const dataroomId = parseNullableInt(segments[1])
+  if (segments.length >= 4 && segments[2] === 'folders') {
+    const folderId = parseNullableInt(segments[3])
+    return { dataroomId, folderId }
+  }
+
+  return { dataroomId, folderId: null as number | null }
+}
+
+const buildLocationPath = (dataroomId: number | null, folderId: number | null) => {
+  if (!dataroomId) return '/'
+  if (folderId) return `/datarooms/${dataroomId}/folders/${folderId}`
+  return `/datarooms/${dataroomId}`
+}
+
+const readLocationState = () => {
+  if (typeof window === 'undefined') {
+    return { dataroomId: null as number | null, folderId: null as number | null }
+  }
+  return parseLocationPath(window.location.pathname)
+}
+
 export const useDataroomState = () => {
   const { data: dataroomData, loading: dataroomLoading, error: dataroomError, refetch: refetchDatarooms } =
     useDataroomsQuery()
-  const datarooms: ApiDataroom[] = dataroomData?.datarooms ?? []
+  const datarooms: ApiDataroom[] = useMemo(() => dataroomData?.datarooms ?? [], [dataroomData])
 
-  const [selectedDataroomId, setSelectedDataroomId] = useState<number | null>(null)
-  const [currentFolderId, setCurrentFolderId] = useState<number | null>(null)
+  const initialLocation = readLocationState()
+  const [selectedDataroomId, setSelectedDataroomId] = useState<number | null>(initialLocation.dataroomId)
+  const [currentFolderId, setCurrentFolderId] = useState<number | null>(initialLocation.folderId)
   const [selectedFile, setSelectedFile] = useState<ApiFile | null>(null)
   const [highlightFileId, setHighlightFileId] = useState<number | null>(null)
   const [notice, setNotice] = useState<Notice | null>(null)
@@ -70,8 +105,29 @@ export const useDataroomState = () => {
   const [deleteFile] = useDeleteFileMutation()
 
   const activeDataroom = datarooms.find((room) => room.id === selectedDataroomId) ?? null
-  const folders: ApiFolder[] = contentsData?.folderContents.folders ?? []
-  const files: ApiFile[] = contentsData?.folderContents.files ?? []
+  const folders: ApiFolder[] = useMemo(
+    () => contentsData?.folderContents.folders ?? [],
+    [contentsData],
+  )
+  const files: ApiFile[] = useMemo(() => contentsData?.folderContents.files ?? [], [contentsData])
+
+  useEffect(() => {
+    const onPopState = () => {
+      const routeState = readLocationState()
+      setSelectedDataroomId(routeState.dataroomId)
+      setCurrentFolderId(routeState.folderId)
+      setSelectedFile(null)
+      setHighlightFileId(null)
+    }
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
+  }, [])
+
+  useEffect(() => {
+    const nextUrl = buildLocationPath(selectedDataroomId, currentFolderId)
+    if (window.location.pathname === nextUrl) return
+    window.history.pushState({}, '', nextUrl)
+  }, [selectedDataroomId, currentFolderId])
 
   useEffect(() => {
     if (!datarooms.length) {
@@ -209,28 +265,49 @@ export const useDataroomState = () => {
     setNotice({ type: 'success', message: 'Folder deleted.' })
   }
 
-  const handleUpload = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
+  const handleUploadFiles = async (uploads: globalThis.File[]) => {
+    if (!uploads.length) return
     if (!selectedDataroomId) {
       setNotice({ type: 'error', message: 'Select a dataroom before uploading.' })
       return
     }
-    if (!file.name.toLowerCase().endsWith('.pdf')) {
-      setNotice({ type: 'error', message: 'Only PDF files are supported.' })
-      event.target.value = ''
+
+    let uploadedCount = 0
+    let failedCount = 0
+
+    for (const upload of uploads) {
+      if (!upload.name.toLowerCase().endsWith('.pdf')) {
+        failedCount += 1
+        continue
+      }
+      try {
+        await uploadFile({
+          variables: {
+            dataroomId: selectedDataroomId,
+            folderId: currentFolderId,
+            file: upload,
+          },
+        })
+        uploadedCount += 1
+      } catch (err) {
+        console.error(err)
+        failedCount += 1
+      }
+    }
+
+    if (uploadedCount > 0) {
+      await refetchContents()
+      const suffix = failedCount > 0 ? ` ${failedCount} file(s) failed validation.` : ''
+      setNotice({ type: 'success', message: `Uploaded ${uploadedCount} file(s).${suffix}` })
       return
     }
+    setNotice({ type: 'error', message: 'No files uploaded. Only valid PDF files are allowed.' })
+  }
+
+  const handleUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const uploads = Array.from(event.target.files ?? [])
     try {
-      await uploadFile({
-        variables: {
-          dataroomId: selectedDataroomId,
-          folderId: currentFolderId,
-          file,
-        },
-      })
-      await refetchContents()
-      setNotice({ type: 'success', message: 'File uploaded.' })
+      await handleUploadFiles(uploads)
     } catch (err) {
       setNotice({ type: 'error', message: getErrorMessage(err) })
     } finally {
@@ -296,6 +373,7 @@ export const useDataroomState = () => {
     handleRenameFolder,
     handleDeleteFolder,
     handleUpload,
+    handleUploadFiles,
     handleRenameFile,
     handleDeleteFile,
     openFileLocation,

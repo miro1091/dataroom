@@ -1,8 +1,18 @@
-import { useMemo, useState } from 'react'
+import {
+  Alert,
+  Box,
+  Button,
+  Paper,
+  Stack,
+  Tab,
+  Tabs,
+  TextField,
+  Typography,
+} from '@mui/material'
+import { type SyntheticEvent, useMemo, useState } from 'react'
 import { type FieldErrors, type Resolver, useForm } from 'react-hook-form'
 import { z } from 'zod'
 
-import { BUTTONS } from '../constants/ui'
 import type { AuthCredentials } from '../types/auth'
 
 const loginSchema = z.object({
@@ -10,12 +20,14 @@ const loginSchema = z.object({
   password: z.string().min(6, 'Password must be at least 6 characters.'),
 })
 
-const registerSchema = loginSchema.extend({
-  confirmPassword: z.string().min(6, 'Confirm your password.'),
-}).refine((data) => data.password === data.confirmPassword, {
-  message: 'Passwords do not match.',
-  path: ['confirmPassword'],
-})
+const registerSchema = loginSchema
+  .extend({
+    confirmPassword: z.string().min(6, 'Confirm your password.'),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: 'Passwords do not match.',
+    path: ['confirmPassword'],
+  })
 
 type FormValues = z.infer<typeof registerSchema>
 
@@ -98,110 +110,77 @@ export const AuthGate = ({ onSubmit }: AuthGateProps) => {
     }
   })
 
-  const toggleMode = () => {
-    setMode((prev) => (prev === 'login' ? 'register' : 'login'))
-    setSuccessMessage('')
-    reset({ username: '', password: '', confirmPassword: '' })
-  }
-
-  const switchMode = (nextMode: 'login' | 'register') => {
-    if (nextMode === mode) return
-    setMode(nextMode)
+  const switchMode = (_: SyntheticEvent, nextValue: 'login' | 'register') => {
+    if (!nextValue || nextValue === mode) return
+    setMode(nextValue)
     setSuccessMessage('')
     reset({ username: '', password: '', confirmPassword: '' })
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-6">
-      <div className="w-full max-w-md rounded-2xl border border-border bg-white/90 p-6 shadow-soft">
-        <div className="flex rounded-full bg-[#f4efe9] p-1 text-xs font-medium text-muted">
-          <button
-            type="button"
-            onClick={() => switchMode('login')}
-            className={`flex-1 rounded-full px-3 py-2 ${
-              mode === 'login' ? 'bg-white text-ink shadow-soft' : 'text-muted'
-            }`}
-          >
-            Log in
-          </button>
-          <button
-            type="button"
-            onClick={() => switchMode('register')}
-            className={`flex-1 rounded-full px-3 py-2 ${
-              mode === 'register' ? 'bg-white text-ink shadow-soft' : 'text-muted'
-            }`}
-          >
-            Sign up
-          </button>
-        </div>
+    <Box
+      sx={{
+        minHeight: '100vh',
+        display: 'grid',
+        placeItems: 'center',
+        p: 3,
+        background:
+          'radial-gradient(circle at 10% 0%, #dfe9ff 0%, transparent 35%), radial-gradient(circle at 90% 0%, #eaf4ff 0%, transparent 45%), #f4f7fc',
+      }}
+    >
+      <Paper elevation={0} sx={{ width: '100%', maxWidth: 420, p: 4, border: '1px solid', borderColor: 'divider' }}>
+        <Typography variant="h5" gutterBottom>
+          Acme Dataroom
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+          Secure document workspace for diligence teams.
+        </Typography>
 
-        <h1 className="font-sans text-2xl font-semibold text-ink">
-          {mode === 'login' ? 'Log in' : 'Sign up'}
-        </h1>
-        <p className="mt-2 text-sm text-muted">
-          {mode === 'login'
-            ? 'Use your credentials to access this dataroom workspace.'
-            : 'Create your account to access this dataroom workspace.'}
-        </p>
-        {successMessage ? (
-          <div className="mt-4 rounded-lg border border-[#b7e1c1] bg-[#e9f8ef] px-3 py-2 text-sm text-[#1f6d3a]">
-            {successMessage}
-          </div>
-        ) : null}
-        <form className="mt-5 flex flex-col gap-4" onSubmit={submit}>
-          <label className="flex flex-col gap-2 text-sm text-ink">
-            <span>Username</span>
-            <input
-              className="rounded-lg border border-border bg-[#fffaf4] px-3 py-2 text-sm"
-              placeholder="acme"
-              {...register('username')}
-            />
-            {errors.username ? (
-              <span className="text-xs text-[#a33d2e]">{errors.username.message}</span>
-            ) : null}
-          </label>
+        <Tabs value={mode} onChange={switchMode} variant="fullWidth" sx={{ mb: 2 }}>
+          <Tab value="login" label="Log in" />
+          <Tab value="register" label="Sign up" />
+        </Tabs>
 
-          <label className="flex flex-col gap-2 text-sm text-ink">
-            <span>Password</span>
-            <input
-              className="rounded-lg border border-border bg-[#fffaf4] px-3 py-2 text-sm"
-              type="password"
-              placeholder="••••••••"
-              {...register('password')}
-            />
-            {errors.password ? (
-              <span className="text-xs text-[#a33d2e]">{errors.password.message}</span>
-            ) : null}
-          </label>
+        <Stack component="form" spacing={2} onSubmit={submit}>
+          {successMessage ? <Alert severity="success">{successMessage}</Alert> : null}
+          {errors.root ? <Alert severity="error">{errors.root.message}</Alert> : null}
+
+          <TextField
+            label="Username"
+            placeholder="acme"
+            size="small"
+            error={Boolean(errors.username)}
+            helperText={errors.username?.message}
+            {...register('username')}
+          />
+
+          <TextField
+            label="Password"
+            placeholder="••••••••"
+            type="password"
+            size="small"
+            error={Boolean(errors.password)}
+            helperText={errors.password?.message}
+            {...register('password')}
+          />
 
           {mode === 'register' ? (
-            <label className="flex flex-col gap-2 text-sm text-ink">
-              <span>Confirm password</span>
-              <input
-                className="rounded-lg border border-border bg-[#fffaf4] px-3 py-2 text-sm"
-                type="password"
-                placeholder="••••••••"
-                {...register('confirmPassword')}
-              />
-              {errors.confirmPassword ? (
-                <span className="text-xs text-[#a33d2e]">{errors.confirmPassword.message}</span>
-              ) : null}
-            </label>
+            <TextField
+              label="Confirm password"
+              placeholder="••••••••"
+              type="password"
+              size="small"
+              error={Boolean(errors.confirmPassword)}
+              helperText={errors.confirmPassword?.message}
+              {...register('confirmPassword')}
+            />
           ) : null}
 
-          {errors.root ? (
-            <span className="text-xs text-[#a33d2e]">{errors.root.message}</span>
-          ) : null}
-
-          <button className={BUTTONS.primary} type="submit" disabled={loading}>
-            {loading ? 'Please wait…' : mode === 'login' ? 'Log in' : 'Sign up'}
-          </button>
-        </form>
-
-        <button className="mt-4 text-sm text-muted underline" onClick={toggleMode} type="button">
-          {mode === 'login' ? "No account? Sign up" : 'Already have an account? Log in'}
-        </button>
-      </div>
-    </div>
+          <Button type="submit" variant="contained" disabled={loading}>
+            {loading ? 'Please wait...' : mode === 'login' ? 'Log in' : 'Sign up'}
+          </Button>
+        </Stack>
+      </Paper>
+    </Box>
   )
 }
