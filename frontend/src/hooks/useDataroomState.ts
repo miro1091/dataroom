@@ -5,6 +5,7 @@ import {
   useCreateFolderMutation,
   useDataroomsQuery,
   useDeleteDataroomMutation,
+  useDeleteFilesMutation,
   useDeleteFileMutation,
   useDeleteFolderMutation,
   useFolderBreadcrumbQuery,
@@ -18,6 +19,13 @@ import type { ApiDataroom, ApiFile, ApiFolder } from '../types/graphql'
 import type { DialogState, Notice } from '../types/ui'
 import { NOTICE_TIMEOUT_MS } from '../constants/ui'
 import { getErrorMessage, getGraphQLErrorMessage } from '../utils/errors'
+
+const DEFAULT_FILE_PAGE_SIZE = 20
+const FILE_PAGE_SIZE_OPTIONS = [10, 20, 50] as const
+
+export type DriveSortColumn = 'name' | 'type' | 'size' | 'createdAt' | 'updatedAt'
+export type DriveSortDirection = 'asc' | 'desc'
+export const DRIVE_PAGE_SIZE_OPTIONS = FILE_PAGE_SIZE_OPTIONS
 
 const parseNullableInt = (value: string | null): number | null => {
   if (!value) return null
@@ -63,12 +71,17 @@ export const useDataroomState = () => {
   const [currentFolderId, setCurrentFolderId] = useState<number | null>(initialLocation.folderId)
   const [selectedFile, setSelectedFile] = useState<ApiFile | null>(null)
   const [highlightFileId, setHighlightFileId] = useState<number | null>(null)
+  const [sortBy, setSortBy] = useState<DriveSortColumn>('name')
+  const [sortDirection, setSortDirection] = useState<DriveSortDirection>('asc')
+  const [filePage, setFilePage] = useState(0)
+  const [filePageSize, setFilePageSize] = useState<number>(DEFAULT_FILE_PAGE_SIZE)
   const [notice, setNotice] = useState<Notice | null>(null)
   const [dialog, setDialog] = useState<DialogState | null>(null)
   const [dialogValue, setDialogValue] = useState('')
   const [dialogBusy, setDialogBusy] = useState(false)
   const [dialogError, setDialogError] = useState('')
   const lastQueryErrorRef = useRef<string | null>(null)
+  const fileOffset = filePage * filePageSize
 
   const normalizeName = (name: string) => name.trim().toLowerCase()
   const ensureUniqueName = (items: Array<{ id: number; name: string }>, name: string, currentId?: number) => {
@@ -82,9 +95,22 @@ export const useDataroomState = () => {
     }
   }
 
-  const { data: contentsData, loading: contentsLoading, error: contentsError, refetch: refetchContents } =
+  const {
+    data: contentsData,
+    previousData: previousContentsData,
+    loading: contentsLoading,
+    error: contentsError,
+    refetch: refetchContents,
+  } =
     useFolderContentsQuery({
-      variables: { dataroomId: selectedDataroomId ?? 0, parentId: currentFolderId },
+      variables: {
+        dataroomId: selectedDataroomId ?? 0,
+        parentId: currentFolderId,
+        sortBy,
+        sortDirection,
+        fileOffset,
+        fileLimit: filePageSize,
+      },
       skip: !selectedDataroomId,
       fetchPolicy: 'cache-and-network',
     })
@@ -103,13 +129,18 @@ export const useDataroomState = () => {
   const [uploadFile] = useUploadFileMutation()
   const [renameFile] = useRenameFileMutation()
   const [deleteFile] = useDeleteFileMutation()
+  const [deleteFiles] = useDeleteFilesMutation()
 
+  const folderContents = contentsData?.folderContents ?? previousContentsData?.folderContents
   const activeDataroom = datarooms.find((room) => room.id === selectedDataroomId) ?? null
   const folders: ApiFolder[] = useMemo(
-    () => contentsData?.folderContents.folders ?? [],
-    [contentsData],
+    () => folderContents?.folders ?? [],
+    [folderContents],
   )
-  const files: ApiFile[] = useMemo(() => contentsData?.folderContents.files ?? [], [contentsData])
+  const files: ApiFile[] = useMemo(() => folderContents?.files ?? [], [folderContents])
+  const contentsItems = useMemo(() => folderContents?.items ?? [], [folderContents])
+  const filesTotal = folderContents?.filesTotal ?? 0
+  const filesHasMore = folderContents?.filesHasMore ?? false
 
   useEffect(() => {
     const onPopState = () => {
@@ -146,10 +177,22 @@ export const useDataroomState = () => {
   }, [selectedDataroomId, currentFolderId])
 
   useEffect(() => {
+    setFilePage(0)
+  }, [selectedDataroomId, currentFolderId, sortBy, sortDirection, filePageSize])
+
+  useEffect(() => {
     if (!selectedFile) return
     const refreshed = files.find((item) => item.id === selectedFile.id)
     setSelectedFile(refreshed ?? null)
   }, [files, selectedFile])
+
+  useEffect(() => {
+    if (!folderContents) return
+    const maxPage = Math.max(Math.ceil(filesTotal / filePageSize) - 1, 0)
+    if (filePage > maxPage) {
+      setFilePage(maxPage)
+    }
+  }, [filePage, filePageSize, filesTotal, folderContents])
 
 
   useEffect(() => {
@@ -265,6 +308,16 @@ export const useDataroomState = () => {
     setNotice({ type: 'success', message: 'Folder deleted.' })
   }
 
+  const handleDeleteFolders = async (ids: number[]) => {
+    const uniqueIds = Array.from(new Set(ids.filter((id) => id > 0)))
+    if (uniqueIds.length === 0) return
+    for (const id of uniqueIds) {
+      await deleteFolder({ variables: { id } })
+    }
+    await refetchContents()
+    setNotice({ type: 'success', message: `Deleted ${uniqueIds.length} folder(s).` })
+  }
+
   const handleUploadFiles = async (uploads: globalThis.File[]) => {
     if (!uploads.length) return
     if (!selectedDataroomId) {
@@ -331,6 +384,18 @@ export const useDataroomState = () => {
     setNotice({ type: 'success', message: 'File deleted.' })
   }
 
+  const handleDeleteFiles = async (ids: number[]) => {
+    const uniqueIds = Array.from(new Set(ids.filter((id) => id > 0)))
+    if (uniqueIds.length === 0) return
+    const result = await deleteFiles({ variables: { ids: uniqueIds } })
+    if (selectedFile && uniqueIds.includes(selectedFile.id)) {
+      setSelectedFile(null)
+    }
+    await refetchContents()
+    const deletedCount = result.data?.deleteFiles ?? uniqueIds.length
+    setNotice({ type: 'success', message: `Deleted ${deletedCount} file(s).` })
+  }
+
   const openFileLocation = (dataroomId: number, folderId: number | null, fileId: number) => {
     setSelectedDataroomId(dataroomId)
     setCurrentFolderId(folderId)
@@ -348,10 +413,17 @@ export const useDataroomState = () => {
     breadcrumb,
     folders,
     files,
+    contentsItems,
     contentsLoading,
     contentsError,
     selectedFile,
     highlightFileId,
+    sortBy,
+    sortDirection,
+    filePage,
+    filePageSize,
+    filesTotal,
+    filesHasMore,
     notice,
     dialog,
     dialogValue,
@@ -361,6 +433,15 @@ export const useDataroomState = () => {
     setCurrentFolderId,
     setSelectedFile,
     setHighlightFileId,
+    setSortBy,
+    setSortDirection,
+    setFilePage,
+    setFilePageSize: (size: number) =>
+      setFilePageSize(
+        FILE_PAGE_SIZE_OPTIONS.includes(size as (typeof FILE_PAGE_SIZE_OPTIONS)[number])
+          ? size
+          : DEFAULT_FILE_PAGE_SIZE,
+      ),
     setDialogValue,
     openInputDialog,
     openConfirmDialog,
@@ -372,10 +453,12 @@ export const useDataroomState = () => {
     handleCreateFolder,
     handleRenameFolder,
     handleDeleteFolder,
+    handleDeleteFolders,
     handleUpload,
     handleUploadFiles,
     handleRenameFile,
     handleDeleteFile,
+    handleDeleteFiles,
     openFileLocation,
   }
 }

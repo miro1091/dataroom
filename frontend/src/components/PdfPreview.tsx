@@ -196,7 +196,7 @@ export const PdfPreview = ({ file, token, onDownload }: PdfPreviewProps) => {
           overflow: 'auto',
           display: 'grid',
           placeItems: 'center',
-          bgcolor: '#f8fbff',
+          bgcolor: 'background.default',
         }}
       >
         {loading ? (

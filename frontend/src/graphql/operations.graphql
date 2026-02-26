@@ -7,8 +7,34 @@ query Datarooms {
   }
 }
 
-query FolderContents($dataroomId: Int!, $parentId: Int, $search: String) {
-  folderContents(dataroomId: $dataroomId, parentId: $parentId, search: $search) {
+query FolderContents(
+  $dataroomId: Int!
+  $parentId: Int
+  $search: String
+  $sortBy: String
+  $sortDirection: String
+  $fileOffset: Int!
+  $fileLimit: Int!
+) {
+  folderContents(
+    dataroomId: $dataroomId
+    parentId: $parentId
+    search: $search
+    sortBy: $sortBy
+    sortDirection: $sortDirection
+    fileOffset: $fileOffset
+    fileLimit: $fileLimit
+  ) {
+    items {
+      key
+      kind
+      id
+      name
+      size
+      contentType
+      createdAt
+      updatedAt
+    }
     folders {
       id
       dataroomId
@@ -28,6 +54,10 @@ query FolderContents($dataroomId: Int!, $parentId: Int, $search: String) {
       updatedAt
       downloadUrl
     }
+    filesTotal
+    filesHasMore
+    fileOffset
+    fileLimit
   }
 }
 
@@ -117,6 +147,10 @@ mutation RenameFile($id: Int!, $name: String!) {
 
 mutation DeleteFile($id: Int!) {
   deleteFile(id: $id)
+}
+
+mutation DeleteFiles($ids: [Int!]!) {
+  deleteFiles(ids: $ids)
 }
 
 query SearchFiles($query: String!, $offset: Int!, $limit: Int!) {

@@ -26,6 +26,18 @@ export type Dataroom = {
   updatedAt: Scalars['String']['output'];
 };
 
+export type DriveListItem = {
+  __typename?: 'DriveListItem';
+  contentType?: Maybe<Scalars['String']['output']>;
+  createdAt: Scalars['String']['output'];
+  id: Scalars['Int']['output'];
+  key: Scalars['String']['output'];
+  kind: Scalars['String']['output'];
+  name: Scalars['String']['output'];
+  size?: Maybe<Scalars['Int']['output']>;
+  updatedAt: Scalars['String']['output'];
+};
+
 export type File = {
   __typename?: 'File';
   contentType: Scalars['String']['output'];
@@ -51,8 +63,13 @@ export type Folder = {
 
 export type FolderContents = {
   __typename?: 'FolderContents';
+  fileLimit: Scalars['Int']['output'];
+  fileOffset: Scalars['Int']['output'];
   files: Array<File>;
+  filesHasMore: Scalars['Boolean']['output'];
+  filesTotal: Scalars['Int']['output'];
   folders: Array<Folder>;
+  items: Array<DriveListItem>;
 };
 
 export type Mutation = {
@@ -61,6 +78,7 @@ export type Mutation = {
   createFolder: Folder;
   deleteDataroom: Scalars['Boolean']['output'];
   deleteFile: Scalars['Boolean']['output'];
+  deleteFiles: Scalars['Int']['output'];
   deleteFolder: Scalars['Boolean']['output'];
   renameDataroom: Dataroom;
   renameFile: File;
@@ -88,6 +106,11 @@ export type MutationDeleteDataroomArgs = {
 
 export type MutationDeleteFileArgs = {
   id: Scalars['Int']['input'];
+};
+
+
+export type MutationDeleteFilesArgs = {
+  ids: Array<Scalars['Int']['input']>;
 };
 
 
@@ -149,8 +172,12 @@ export type QueryFolderBreadcrumbArgs = {
 
 export type QueryFolderContentsArgs = {
   dataroomId: Scalars['Int']['input'];
+  fileLimit: Scalars['Int']['input'];
+  fileOffset: Scalars['Int']['input'];
   parentId?: InputMaybe<Scalars['Int']['input']>;
   search?: InputMaybe<Scalars['String']['input']>;
+  sortBy?: InputMaybe<Scalars['String']['input']>;
+  sortDirection?: InputMaybe<Scalars['String']['input']>;
 };
 
 
@@ -188,10 +215,14 @@ export type FolderContentsQueryVariables = Exact<{
   dataroomId: Scalars['Int']['input'];
   parentId?: InputMaybe<Scalars['Int']['input']>;
   search?: InputMaybe<Scalars['String']['input']>;
+  sortBy?: InputMaybe<Scalars['String']['input']>;
+  sortDirection?: InputMaybe<Scalars['String']['input']>;
+  fileOffset: Scalars['Int']['input'];
+  fileLimit: Scalars['Int']['input'];
 }>;
 
 
-export type FolderContentsQuery = { __typename?: 'Query', folderContents: { __typename?: 'FolderContents', folders: Array<{ __typename?: 'Folder', id: number, dataroomId: number, parentId?: number | null, name: string, createdAt: string, updatedAt: string }>, files: Array<{ __typename?: 'File', id: number, dataroomId: number, folderId?: number | null, name: string, size: number, contentType: string, createdAt: string, updatedAt: string, downloadUrl: string }> } };
+export type FolderContentsQuery = { __typename?: 'Query', folderContents: { __typename?: 'FolderContents', filesTotal: number, filesHasMore: boolean, fileOffset: number, fileLimit: number, items: Array<{ __typename?: 'DriveListItem', key: string, kind: string, id: number, name: string, size?: number | null, contentType?: string | null, createdAt: string, updatedAt: string }>, folders: Array<{ __typename?: 'Folder', id: number, dataroomId: number, parentId?: number | null, name: string, createdAt: string, updatedAt: string }>, files: Array<{ __typename?: 'File', id: number, dataroomId: number, folderId?: number | null, name: string, size: number, contentType: string, createdAt: string, updatedAt: string, downloadUrl: string }> } };
 
 export type FolderBreadcrumbQueryVariables = Exact<{
   folderId: Scalars['Int']['input'];
@@ -271,6 +302,13 @@ export type DeleteFileMutationVariables = Exact<{
 
 export type DeleteFileMutation = { __typename?: 'Mutation', deleteFile: boolean };
 
+export type DeleteFilesMutationVariables = Exact<{
+  ids: Array<Scalars['Int']['input']> | Scalars['Int']['input'];
+}>;
+
+
+export type DeleteFilesMutation = { __typename?: 'Mutation', deleteFiles: number };
+
 export type SearchFilesQueryVariables = Exact<{
   query: Scalars['String']['input'];
   offset: Scalars['Int']['input'];
@@ -327,8 +365,26 @@ export type DataroomsLazyQueryHookResult = ReturnType<typeof useDataroomsLazyQue
 export type DataroomsSuspenseQueryHookResult = ReturnType<typeof useDataroomsSuspenseQuery>;
 export type DataroomsQueryResult = Apollo.QueryResult<DataroomsQuery, DataroomsQueryVariables>;
 export const FolderContentsDocument = gql`
-    query FolderContents($dataroomId: Int!, $parentId: Int, $search: String) {
-  folderContents(dataroomId: $dataroomId, parentId: $parentId, search: $search) {
+    query FolderContents($dataroomId: Int!, $parentId: Int, $search: String, $sortBy: String, $sortDirection: String, $fileOffset: Int!, $fileLimit: Int!) {
+  folderContents(
+    dataroomId: $dataroomId
+    parentId: $parentId
+    search: $search
+    sortBy: $sortBy
+    sortDirection: $sortDirection
+    fileOffset: $fileOffset
+    fileLimit: $fileLimit
+  ) {
+    items {
+      key
+      kind
+      id
+      name
+      size
+      contentType
+      createdAt
+      updatedAt
+    }
     folders {
       id
       dataroomId
@@ -348,6 +404,10 @@ export const FolderContentsDocument = gql`
       updatedAt
       downloadUrl
     }
+    filesTotal
+    filesHasMore
+    fileOffset
+    fileLimit
   }
 }
     `;
@@ -367,6 +427,10 @@ export const FolderContentsDocument = gql`
  *      dataroomId: // value for 'dataroomId'
  *      parentId: // value for 'parentId'
  *      search: // value for 'search'
+ *      sortBy: // value for 'sortBy'
+ *      sortDirection: // value for 'sortDirection'
+ *      fileOffset: // value for 'fileOffset'
+ *      fileLimit: // value for 'fileLimit'
  *   },
  * });
  */
@@ -770,6 +834,37 @@ export function useDeleteFileMutation(baseOptions?: Apollo.MutationHookOptions<D
 export type DeleteFileMutationHookResult = ReturnType<typeof useDeleteFileMutation>;
 export type DeleteFileMutationResult = Apollo.MutationResult<DeleteFileMutation>;
 export type DeleteFileMutationOptions = Apollo.BaseMutationOptions<DeleteFileMutation, DeleteFileMutationVariables>;
+export const DeleteFilesDocument = gql`
+    mutation DeleteFiles($ids: [Int!]!) {
+  deleteFiles(ids: $ids)
+}
+    `;
+export type DeleteFilesMutationFn = Apollo.MutationFunction<DeleteFilesMutation, DeleteFilesMutationVariables>;
+
+/**
+ * __useDeleteFilesMutation__
+ *
+ * To run a mutation, you first call `useDeleteFilesMutation` within a React component and pass it any options that fit your needs.
+ * When your component renders, `useDeleteFilesMutation` returns a tuple that includes:
+ * - A mutate function that you can call at any time to execute the mutation
+ * - An object with fields that represent the current status of the mutation's execution
+ *
+ * @param baseOptions options that will be passed into the mutation, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options-2;
+ *
+ * @example
+ * const [deleteFilesMutation, { data, loading, error }] = useDeleteFilesMutation({
+ *   variables: {
+ *      ids: // value for 'ids'
+ *   },
+ * });
+ */
+export function useDeleteFilesMutation(baseOptions?: Apollo.MutationHookOptions<DeleteFilesMutation, DeleteFilesMutationVariables>) {
+        const options = {...defaultOptions, ...baseOptions}
+        return Apollo.useMutation<DeleteFilesMutation, DeleteFilesMutationVariables>(DeleteFilesDocument, options);
+      }
+export type DeleteFilesMutationHookResult = ReturnType<typeof useDeleteFilesMutation>;
+export type DeleteFilesMutationResult = Apollo.MutationResult<DeleteFilesMutation>;
+export type DeleteFilesMutationOptions = Apollo.BaseMutationOptions<DeleteFilesMutation, DeleteFilesMutationVariables>;
 export const SearchFilesDocument = gql`
     query SearchFiles($query: String!, $offset: Int!, $limit: Int!) {
   searchFiles(query: $query, offset: $offset, limit: $limit) {

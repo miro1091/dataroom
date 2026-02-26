@@ -1,5 +1,5 @@
+import { Avatar, Box, Button, Stack, Typography } from '@mui/material'
 import type { ReactNode } from 'react'
-import { BUTTONS } from '../constants/ui'
 
 type TopbarProps = {
   onCreate: () => void
@@ -9,29 +9,27 @@ type TopbarProps = {
 
 export const Topbar = ({ onCreate, search, auth }: TopbarProps) => {
   return (
-    <header className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-      <div className="flex items-center gap-4">
-        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-accent to-[#e7a07c] font-sans text-xl font-bold text-[#fffaf2] shadow-soft">
-          A
-        </div>
-        <div>
-          <h1 className="font-sans text-2xl font-semibold tracking-tight text-ink sm:text-3xl">
-            Acme Dataroom
-          </h1>
-          <p className="text-sm text-muted sm:text-base">
+    <Stack direction={{ xs: 'column', lg: 'row' }} spacing={3} justifyContent="space-between">
+      <Stack direction="row" spacing={2} alignItems="center">
+        <Avatar sx={{ width: 48, height: 48, fontWeight: 700 }}>A</Avatar>
+        <Box>
+          <Typography variant="h4">Acme Dataroom</Typography>
+          <Typography variant="body2" color="text.secondary">
             Secure deal rooms for high-stakes diligence
-          </p>
-        </div>
-      </div>
+          </Typography>
+        </Box>
+      </Stack>
 
-      <div className="flex flex-wrap items-center gap-4">
+      <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap" useFlexGap>
         {search ?? null}
         {auth ?? null}
-        <span className="text-sm text-muted">Trusted for sensitive acquisitions</span>
-        <button className={BUTTONS.primary} onClick={onCreate}>
+        <Typography variant="body2" color="text.secondary">
+          Trusted for sensitive acquisitions
+        </Typography>
+        <Button variant="contained" onClick={onCreate}>
           New dataroom
-        </button>
-      </div>
-    </header>
+        </Button>
+      </Stack>
+    </Stack>
   )
 }

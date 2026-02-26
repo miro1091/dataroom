@@ -33,9 +33,25 @@ type File {
   downloadUrl: String!
 }
 
+type DriveListItem {
+  key: String!
+  kind: String!
+  id: Int!
+  name: String!
+  size: Int
+  contentType: String
+  createdAt: String!
+  updatedAt: String!
+}
+
 type FolderContents {
+  items: [DriveListItem!]!
   folders: [Folder!]!
   files: [File!]!
+  filesTotal: Int!
+  filesHasMore: Boolean!
+  fileOffset: Int!
+  fileLimit: Int!
 }
 
 type SearchFileResult {
@@ -58,7 +74,15 @@ type SearchFilesResult {
 type Query {
   datarooms: [Dataroom!]!
   dataroom(id: Int!): Dataroom!
-  folderContents(dataroomId: Int!, parentId: Int, search: String): FolderContents!
+  folderContents(
+    dataroomId: Int!
+    parentId: Int
+    search: String
+    sortBy: String
+    sortDirection: String
+    fileOffset: Int!
+    fileLimit: Int!
+  ): FolderContents!
   folderBreadcrumb(folderId: Int!): [Folder!]!
   file(id: Int!): File!
   searchFiles(query: String!, offset: Int!, limit: Int!): SearchFilesResult!
@@ -74,4 +98,5 @@ type Mutation {
   uploadFile(dataroomId: Int!, file: Upload!, folderId: Int, name: String): File!
   renameFile(id: Int!, name: String!): File!
   deleteFile(id: Int!): Boolean!
+  deleteFiles(ids: [Int!]!): Int!
 }

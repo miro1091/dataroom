@@ -29,7 +29,13 @@ const link = authLink.concat(uploadLink)
 
 const client = new ApolloClient({
   link,
-  cache: new InMemoryCache(),
+  cache: new InMemoryCache({
+    typePolicies: {
+      DriveListItem: {
+        keyFields: ['key'],
+      },
+    },
+  }),
 })
 
 createRoot(document.getElementById('root')!).render(

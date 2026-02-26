@@ -8,7 +8,7 @@ type NoticeToastProps = {
 export const NoticeToast = ({ notice }: NoticeToastProps) => {
   if (!notice) return null
   return (
-    <Snackbar open anchorOrigin={{ vertical: 'top', horizontal: 'right' }}>
+    <Snackbar open anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
       <Alert severity={notice.type === 'error' ? 'error' : 'success'} variant="filled" sx={{ width: '100%' }}>
         {notice.message}
       </Alert>

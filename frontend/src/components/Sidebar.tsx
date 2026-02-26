@@ -1,5 +1,6 @@
+import AddIcon from '@mui/icons-material/Add'
+import { Alert, Button, IconButton, Paper, Stack, Typography } from '@mui/material'
 import type { ApiDataroom } from '../types/graphql'
-import { BUTTONS } from '../constants/ui'
 
 type SidebarProps = {
   datarooms: ApiDataroom[]
@@ -23,68 +24,72 @@ export const Sidebar = ({
   onDelete,
 }: SidebarProps) => {
   return (
-    <aside className="flex min-h-[70vh] flex-col gap-4 rounded-xl border border-border bg-paper p-5 shadow-soft">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h2 className="font-sans text-lg font-semibold text-ink">Datarooms</h2>
-          <span className="text-sm text-muted">{datarooms.length} active rooms</span>
-        </div>
-        <button className={BUTTONS.icon} onClick={onCreate} aria-label="Create dataroom">
-          +
-        </button>
-      </div>
+    <Paper variant="outlined" sx={{ minHeight: '70vh', p: 2 }}>
+      <Stack spacing={2}>
+        <Stack direction="row" alignItems="center" justifyContent="space-between">
+          <Stack spacing={0.25}>
+            <Typography variant="h6">Datarooms</Typography>
+            <Typography variant="body2" color="text.secondary">
+              {datarooms.length} active rooms
+            </Typography>
+          </Stack>
+          <IconButton onClick={onCreate} aria-label="Create dataroom">
+            <AddIcon />
+          </IconButton>
+        </Stack>
 
-      {loading ? (
-        <div className="rounded-xl border border-dashed border-border bg-white/70 p-4 text-sm text-muted">
-          Loading datarooms…
-        </div>
-      ) : error ? (
-        <div className="rounded-xl border border-dashed border-border bg-white/70 p-4 text-sm text-muted">
-          {error}
-        </div>
-      ) : datarooms.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-border bg-white/70 p-4 text-sm text-muted">
-          Create your first dataroom to begin.
-        </div>
-      ) : (
-        <div className="flex flex-col gap-3">
-          {datarooms.map((room) => (
-            <div
-              key={room.id}
-              className={`flex items-start justify-between gap-3 rounded-xl border bg-surface p-3 transition ${
-                selectedId === room.id
-                  ? 'border-accent/40 shadow-md -translate-y-0.5'
-                  : 'border-transparent'
-              }`}
-            >
-              <button
-                className="min-w-0 flex-1 text-left"
-                onClick={() => {
-                  onSelect(room.id)
+        {loading ? <Alert severity="info">Loading datarooms…</Alert> : null}
+        {!loading && error ? <Alert severity="error">{error}</Alert> : null}
+        {!loading && !error && datarooms.length === 0 ? (
+          <Alert severity="info">Create your first dataroom to begin.</Alert>
+        ) : null}
+
+        {!loading && !error && datarooms.length > 0 ? (
+          <Stack spacing={1.25}>
+            {datarooms.map((room) => (
+              <Paper
+                key={room.id}
+                variant="outlined"
+                sx={{
+                  p: 1.25,
+                  borderColor: selectedId === room.id ? 'primary.main' : 'divider',
+                  bgcolor: selectedId === room.id ? 'action.hover' : 'background.paper',
                 }}
               >
-                <span
-                  className="block truncate font-sans text-sm font-semibold text-ink"
-                  title={room.name}
+                <Stack
+                  direction={{ xs: 'column', sm: 'row' }}
+                  spacing={1.25}
+                  alignItems={{ xs: 'stretch', sm: 'center' }}
                 >
-                  {room.name}
-                </span>
-                <span className="block text-xs text-muted">
-                  Updated {new Date(room.updatedAt).toLocaleDateString()}
-                </span>
-              </button>
-              <div className="flex flex-col gap-2 text-xs">
-                <button className={BUTTONS.ghost} onClick={() => onRename(room)}>
-                  Rename
-                </button>
-                <button className={BUTTONS.ghostDanger} onClick={() => onDelete(room)}>
-                  Delete
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </aside>
+                  <Button
+                    variant="text"
+                    color="inherit"
+                    onClick={() => onSelect(room.id)}
+                    sx={{ justifyContent: 'flex-start', flex: 1, textTransform: 'none' }}
+                  >
+                    <Stack spacing={0.25} alignItems="flex-start">
+                      <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                        {room.name}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Updated {new Date(room.updatedAt).toLocaleDateString()}
+                      </Typography>
+                    </Stack>
+                  </Button>
+                  <Stack direction="row" spacing={1}>
+                    <Button size="small" onClick={() => onRename(room)}>
+                      Rename
+                    </Button>
+                    <Button size="small" color="error" onClick={() => onDelete(room)}>
+                      Delete
+                    </Button>
+                  </Stack>
+                </Stack>
+              </Paper>
+            ))}
+          </Stack>
+        ) : null}
+      </Stack>
+    </Paper>
   )
 }

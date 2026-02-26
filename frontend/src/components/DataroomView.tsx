@@ -1,9 +1,19 @@
+import {
+  Alert,
+  Box,
+  Breadcrumbs,
+  Button,
+  Chip,
+  Link,
+  Paper,
+  Stack,
+  Typography,
+} from '@mui/material'
+import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined'
+import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined'
 import type { ChangeEvent, ReactNode } from 'react'
 import type { ApiDataroom, ApiFile, ApiFolder } from '../types/graphql'
-import { BUTTONS } from '../constants/ui'
-import { Breadcrumbs } from './Breadcrumbs'
-import { FolderList } from './FolderList'
-import { FileList } from './FileList'
+import { formatSize } from '../utils/format'
 
 type DataroomViewProps = {
   dataroom: ApiDataroom
@@ -48,64 +58,180 @@ export const DataroomView = ({
   onDeleteFile,
   preview,
 }: DataroomViewProps) => {
+  const renderFolders = () => {
+    if (folders.length === 0) {
+      return <Alert severity="info">No folders here yet.</Alert>
+    }
+
+    return (
+      <Stack spacing={1.25}>
+        {folders.map((folder) => (
+          <Paper key={folder.id} variant="outlined" sx={{ p: 1.25 }}>
+            <Stack
+              direction={{ xs: 'column', sm: 'row' }}
+              spacing={1.25}
+              alignItems={{ xs: 'stretch', sm: 'center' }}
+            >
+              <Button
+                variant="text"
+                color="inherit"
+                startIcon={<FolderOutlinedIcon />}
+                onClick={() => onOpenFolder(folder)}
+                sx={{ justifyContent: 'flex-start', flex: 1, textTransform: 'none' }}
+              >
+                <Stack spacing={0.25} alignItems="flex-start">
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                    {folder.name}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Updated {new Date(folder.updatedAt).toLocaleDateString()}
+                  </Typography>
+                </Stack>
+              </Button>
+              <Stack direction="row" spacing={1}>
+                <Button size="small" onClick={() => onRenameFolder(folder)}>
+                  Rename
+                </Button>
+                <Button size="small" color="error" onClick={() => onDeleteFolder(folder)}>
+                  Delete
+                </Button>
+              </Stack>
+            </Stack>
+          </Paper>
+        ))}
+      </Stack>
+    )
+  }
+
+  const renderFiles = () => {
+    if (files.length === 0) {
+      return <Alert severity="info">Upload your first PDF to share with stakeholders.</Alert>
+    }
+
+    return (
+      <Stack spacing={1.25}>
+        {files.map((file) => {
+          const isActive = selectedFile?.id === file.id || highlightFileId === file.id
+          return (
+            <Paper
+              key={file.id}
+              variant="outlined"
+              sx={{
+                p: 1.25,
+                borderColor: isActive ? 'primary.main' : 'divider',
+                bgcolor: isActive ? 'action.hover' : 'background.paper',
+              }}
+            >
+              <Stack
+                direction={{ xs: 'column', sm: 'row' }}
+                spacing={1.25}
+                alignItems={{ xs: 'stretch', sm: 'center' }}
+              >
+                <Button
+                  variant="text"
+                  color="inherit"
+                  startIcon={<DescriptionOutlinedIcon />}
+                  onClick={() => onSelectFile(file)}
+                  sx={{ justifyContent: 'flex-start', flex: 1, textTransform: 'none' }}
+                >
+                  <Stack spacing={0.5} alignItems="flex-start">
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                      {file.name}
+                    </Typography>
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <Typography variant="caption" color="text.secondary">
+                        Updated {new Date(file.updatedAt).toLocaleDateString()}
+                      </Typography>
+                      <Chip label={formatSize(file.size)} size="small" />
+                    </Stack>
+                  </Stack>
+                </Button>
+                <Stack direction="row" spacing={1}>
+                  <Button size="small" onClick={() => onRenameFile(file)}>
+                    Rename
+                  </Button>
+                  <Button size="small" color="error" onClick={() => onDeleteFile(file)}>
+                    Delete
+                  </Button>
+                </Stack>
+              </Stack>
+            </Paper>
+          )
+        })}
+      </Stack>
+    )
+  }
+
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h2 className="font-sans text-2xl font-semibold text-ink">{dataroom.name}</h2>
-          <Breadcrumbs items={breadcrumb} onRoot={onRoot} onNavigate={onNavigateFolder} />
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <button className={BUTTONS.outline} onClick={onCreateFolder}>
+    <Stack spacing={3}>
+      <Stack
+        direction={{ xs: 'column', md: 'row' }}
+        spacing={2}
+        justifyContent="space-between"
+        alignItems={{ xs: 'stretch', md: 'flex-start' }}
+      >
+        <Box>
+          <Typography variant="h5">{dataroom.name}</Typography>
+          <Breadcrumbs aria-label="dataroom breadcrumb" sx={{ mt: 0.75 }}>
+            <Link component="button" underline="hover" color="inherit" onClick={onRoot}>
+              Home
+            </Link>
+            {breadcrumb.map((folder) => (
+              <Link
+                key={folder.id}
+                component="button"
+                underline="hover"
+                color="inherit"
+                onClick={() => onNavigateFolder(folder.id)}
+              >
+                {folder.name}
+              </Link>
+            ))}
+          </Breadcrumbs>
+        </Box>
+
+        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+          <Button variant="outlined" onClick={onCreateFolder}>
             New folder
-          </button>
-          <label className={BUTTONS.primary}>
+          </Button>
+          <Button variant="contained" component="label">
             Upload PDF
-            <input className="hidden" type="file" accept="application/pdf" onChange={onUpload} />
-          </label>
-        </div>
-      </div>
+            <input hidden type="file" accept="application/pdf" onChange={onUpload} />
+          </Button>
+        </Stack>
+      </Stack>
 
       {loading ? (
-        <div className="rounded-xl border border-dashed border-border bg-white/70 p-4 text-sm text-muted">
-          Loading contents…
-        </div>
+        <Alert severity="info">Loading contents…</Alert>
       ) : error ? (
-        <div className="rounded-xl border border-dashed border-border bg-white/70 p-4 text-sm text-muted">
-          {error}
-        </div>
+        <Alert severity="error">{error}</Alert>
       ) : (
-        <section className="flex flex-col gap-6">
-          <div>
-            <div className="mb-3 font-sans text-xs font-semibold uppercase tracking-[0.2em] text-muted">
+        <Stack spacing={3}>
+          <Box>
+            <Typography variant="overline" color="text.secondary">
               Folders
-            </div>
-            <FolderList
-              folders={folders}
-              onOpen={onOpenFolder}
-              onRename={onRenameFolder}
-              onDelete={onDeleteFolder}
-            />
-          </div>
+            </Typography>
+            <Box sx={{ mt: 1 }}>{renderFolders()}</Box>
+          </Box>
 
-          <div>
-            <div className="mb-3 font-sans text-xs font-semibold uppercase tracking-[0.2em] text-muted">
+          <Box>
+            <Typography variant="overline" color="text.secondary">
               Files
-            </div>
-            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
-              <FileList
-                files={files}
-                selectedFileId={selectedFile?.id ?? null}
-                highlightFileId={highlightFileId}
-                onSelect={onSelectFile}
-                onRename={onRenameFile}
-                onDelete={onDeleteFile}
-              />
+            </Typography>
+            <Box
+              sx={{
+                mt: 1,
+                display: 'grid',
+                gap: 2.5,
+                gridTemplateColumns: { xs: 'minmax(0,1fr)', lg: 'minmax(0,1fr) minmax(0,1.2fr)' },
+              }}
+            >
+              <Box>{renderFiles()}</Box>
               {preview}
-            </div>
-          </div>
-        </section>
+            </Box>
+          </Box>
+        </Stack>
       )}
-    </div>
+    </Stack>
   )
 }

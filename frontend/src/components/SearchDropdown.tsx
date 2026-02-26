@@ -1,5 +1,13 @@
 import { useApolloClient } from '@apollo/client'
-import { Autocomplete, Box, CircularProgress, TextField, Typography } from '@mui/material'
+import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined'
+import {
+  Autocomplete,
+  Box,
+  CircularProgress,
+  InputAdornment,
+  TextField,
+  Typography,
+} from '@mui/material'
 import { useEffect, useState } from 'react'
 import { SearchFilesDocument } from '../graphql/generated'
 import type { SearchFilesQuery } from '../graphql/generated'
@@ -49,7 +57,14 @@ export const SearchDropdown = ({ onSelect }: SearchDropdownProps) => {
 
   return (
     <Autocomplete
-      sx={{ minWidth: 280, width: { xs: '100%', sm: 360 } }}
+      sx={{
+        minWidth: 280,
+        width: { xs: '100%', sm: 360 },
+        '& .MuiOutlinedInput-root': {
+          borderRadius: 999,
+          backgroundColor: '#ffffff',
+        },
+      }}
       options={options}
       getOptionLabel={(option) => option.name}
       filterOptions={(items) => items}
@@ -69,9 +84,14 @@ export const SearchDropdown = ({ onSelect }: SearchDropdownProps) => {
         <TextField
           {...params}
           size="small"
-          placeholder="Search files by name"
+          placeholder="Search files"
           InputProps={{
             ...params.InputProps,
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchOutlinedIcon fontSize="small" color="action" />
+              </InputAdornment>
+            ),
             endAdornment: (
               <>
                 {loading ? <CircularProgress color="inherit" size={16} /> : null}

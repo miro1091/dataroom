@@ -1,3 +1,4 @@
+import { Breadcrumbs as MuiBreadcrumbs, Link } from '@mui/material'
 import type { ApiFolder } from '../types/graphql'
 
 type BreadcrumbsProps = {
@@ -8,22 +9,21 @@ type BreadcrumbsProps = {
 
 export const Breadcrumbs = ({ items, onRoot, onNavigate }: BreadcrumbsProps) => {
   return (
-    <div className="flex flex-wrap gap-2 text-sm">
-      <button
-        className="rounded-full bg-black/5 px-3 py-1 text-xs text-ink transition hover:bg-accent/15"
-        onClick={onRoot}
-      >
+    <MuiBreadcrumbs aria-label="breadcrumb navigation" sx={{ mt: 0.5 }}>
+      <Link component="button" underline="hover" color="inherit" onClick={onRoot}>
         Home
-      </button>
+      </Link>
       {items.map((folder) => (
-        <button
+        <Link
           key={folder.id}
-          className="rounded-full bg-black/5 px-3 py-1 text-xs text-ink transition hover:bg-accent/15"
+          component="button"
+          underline="hover"
+          color="inherit"
           onClick={() => onNavigate(folder.id)}
         >
           {folder.name}
-        </button>
+        </Link>
       ))}
-    </div>
+    </MuiBreadcrumbs>
   )
 }

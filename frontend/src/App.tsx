@@ -13,7 +13,6 @@ import {
   Breadcrumbs,
   Button,
   Chip,
-  Drawer,
   IconButton,
   LinearProgress,
   Link,
@@ -36,7 +35,7 @@ import { NoticeToast } from './components/NoticeToast'
 import { PdfPreview } from './components/PdfPreview'
 import { SearchDropdown } from './components/SearchDropdown'
 import { useAuthToken } from './hooks/useAuthToken'
-import { useDataroomState } from './hooks/useDataroomState'
+import { type DriveSortColumn, useDataroomState } from './hooks/useDataroomState'
 import type { AuthCredentials } from './types/auth'
 import type { ApiDataroom, ApiFile, ApiFolder } from './types/graphql'
 import { requestRegister, requestToken } from './utils/authApi'
@@ -54,10 +53,16 @@ const AppShell = ({ token, onSignOut }: { token: string; onSignOut: () => void }
     breadcrumb,
     folders,
     files,
+    contentsItems,
     contentsLoading,
     contentsError,
     selectedFile,
     highlightFileId,
+    sortBy,
+    sortDirection,
+    filePage,
+    filePageSize,
+    filesTotal,
     notice,
     dialog,
     dialogValue,
@@ -67,6 +72,10 @@ const AppShell = ({ token, onSignOut }: { token: string; onSignOut: () => void }
     setCurrentFolderId,
     setSelectedFile,
     setHighlightFileId,
+    setSortBy,
+    setSortDirection,
+    setFilePage,
+    setFilePageSize,
     setDialogValue,
     openInputDialog,
     openConfirmDialog,
@@ -78,50 +87,43 @@ const AppShell = ({ token, onSignOut }: { token: string; onSignOut: () => void }
     handleCreateFolder,
     handleRenameFolder,
     handleDeleteFolder,
+    handleDeleteFolders,
     handleUpload,
     handleUploadFiles,
     handleRenameFile,
     handleDeleteFile,
+    handleDeleteFiles,
     openFileLocation,
   } = useDataroomState()
 
   const [dragActive, setDragActive] = useState(false)
   const [selectedItemKey, setSelectedItemKey] = useState<string | null>(null)
+  const [selectedBulkKeys, setSelectedBulkKeys] = useState<string[]>([])
   const inputRef = useRef<HTMLInputElement | null>(null)
 
   const folderById = useMemo(() => new Map(folders.map((folder) => [folder.id, folder])), [folders])
   const fileById = useMemo(() => new Map(files.map((file) => [file.id, file])), [files])
 
   const items = useMemo<DriveItem[]>(() => {
-    const folderItems = folders.map((folder) => ({
-      key: `folder-${folder.id}`,
-      kind: 'folder' as const,
-      id: folder.id,
-      name: folder.name,
-      createdAt: folder.createdAt,
-      updatedAt: folder.updatedAt,
-      size: null,
-      contentType: null,
-      highlighted: false,
+    return contentsItems.map((item) => ({
+      key: item.key,
+      kind: item.kind === 'folder' ? 'folder' : 'file',
+      id: item.id,
+      name: item.name,
+      createdAt: item.createdAt,
+      updatedAt: item.updatedAt,
+      size: item.size ?? null,
+      contentType: item.contentType ?? null,
+      highlighted: item.kind === 'file' && highlightFileId === item.id,
     }))
-
-    const fileItems = files.map((file) => ({
-      key: `file-${file.id}`,
-      kind: 'file' as const,
-      id: file.id,
-      name: file.name,
-      createdAt: file.createdAt,
-      updatedAt: file.updatedAt,
-      size: file.size,
-      contentType: file.contentType,
-      highlighted: highlightFileId === file.id,
-    }))
-
-    return [...folderItems, ...fileItems]
-  }, [files, folders, highlightFileId])
+  }, [contentsItems, highlightFileId])
 
   useEffect(() => {
     setSelectedItemKey(null)
+  }, [selectedDataroomId, currentFolderId])
+
+  useEffect(() => {
+    setSelectedBulkKeys([])
   }, [selectedDataroomId, currentFolderId])
 
   const downloadFile = async (file: ApiFile) => {
@@ -206,7 +208,10 @@ const AppShell = ({ token, onSignOut }: { token: string; onSignOut: () => void }
       title: 'Delete folder',
       description: 'This deletes all nested folders and files inside it.',
       confirmLabel: 'Delete',
-      onConfirm: () => handleDeleteFolder(folder),
+      onConfirm: async () => {
+        await handleDeleteFolder(folder)
+        setSelectedBulkKeys((prev) => prev.filter((key) => key !== `folder-${folder.id}`))
+      },
     })
 
   const openRenameFile = (file: ApiFile) =>
@@ -226,8 +231,41 @@ const AppShell = ({ token, onSignOut }: { token: string; onSignOut: () => void }
       title: 'Delete file',
       description: 'This removes the file from the dataroom.',
       confirmLabel: 'Delete',
-      onConfirm: () => handleDeleteFile(file),
+      onConfirm: async () => {
+        await handleDeleteFile(file)
+        setSelectedBulkKeys((prev) => prev.filter((key) => key !== `file-${file.id}`))
+      },
     })
+
+  const openDeleteSelectedItems = () => {
+    const count = selectedBulkKeys.length
+    if (count === 0) return
+
+    const folderIds = selectedBulkKeys
+      .filter((key) => key.startsWith('folder-'))
+      .map((key) => Number.parseInt(key.replace('folder-', ''), 10))
+      .filter((id) => Number.isFinite(id))
+    const fileIds = selectedBulkKeys
+      .filter((key) => key.startsWith('file-'))
+      .map((key) => Number.parseInt(key.replace('file-', ''), 10))
+      .filter((id) => Number.isFinite(id))
+
+    openConfirmDialog({
+      kind: 'confirm',
+      title: 'Delete selected items',
+      description: `This removes ${count} selected item(s). Selected folders are deleted recursively, including child folders and files.`,
+      confirmLabel: `Delete ${count}`,
+      onConfirm: async () => {
+        if (folderIds.length > 0) {
+          await handleDeleteFolders(folderIds)
+        }
+        if (fileIds.length > 0) {
+          await handleDeleteFiles(fileIds)
+        }
+        setSelectedBulkKeys([])
+      },
+    })
+  }
 
   const openDriveItem = (item: DriveItem) => {
     if (item.kind === 'folder') {
@@ -319,31 +357,93 @@ const AppShell = ({ token, onSignOut }: { token: string; onSignOut: () => void }
     setDragActive(false)
   }
 
+  const onSortChange = (column: DriveSortColumn) => {
+    if (sortBy === column) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
+      return
+    }
+    setSortBy(column)
+    setSortDirection('asc')
+  }
+
+  const onToggleItemSelection = (itemKey: string, checked: boolean) => {
+    setSelectedBulkKeys((prev) => {
+      if (checked) {
+        return prev.includes(itemKey) ? prev : [...prev, itemKey]
+      }
+      return prev.filter((key) => key !== itemKey)
+    })
+  }
+
+  const onToggleAllVisibleItems = (visibleItemKeys: string[], checked: boolean) => {
+    setSelectedBulkKeys((prev) => {
+      const next = new Set(prev)
+      visibleItemKeys.forEach((key) => {
+        if (checked) {
+          next.add(key)
+        } else {
+          next.delete(key)
+        }
+      })
+      return Array.from(next)
+    })
+  }
+
   return (
     <Box sx={{ minHeight: '100vh' }}>
       <AppBar
         position="sticky"
         color="transparent"
         elevation={0}
-        sx={{ backdropFilter: 'blur(6px)', borderBottom: '1px solid', borderColor: 'divider' }}
+        sx={{ px: { xs: 1, md: 1.5 } }}
       >
         <Toolbar sx={{ gap: 2, flexWrap: 'wrap', py: 1 }}>
-          <BusinessOutlinedIcon color="primary" />
-          <Typography variant="h6" sx={{ mr: 'auto' }}>
-            Acme Dataroom
-          </Typography>
+          <Box
+            sx={{
+              width: 44,
+              height: 44,
+              borderRadius: 2.25,
+              display: 'grid',
+              placeItems: 'center',
+              color: 'primary.contrastText',
+              fontWeight: 800,
+              bgcolor: 'primary.main',
+            }}
+          >
+            A
+          </Box>
+          <Box sx={{ mr: 'auto' }}>
+            <Typography variant="h6">Acme Dataroom</Typography>
+            <Typography variant="body2" color="text.secondary">
+              Secure deal rooms for high-stakes diligence
+            </Typography>
+          </Box>
           <SearchDropdown onSelect={handleSearchSelect} />
-          <Chip label="Token active" color="success" size="small" variant="outlined" />
+          <Chip label="Token active" size="small" />
           <Button onClick={onSignOut}>Sign out</Button>
+          <Typography variant="body2" color="text.secondary">
+            Trusted for sensitive acquisitions
+          </Typography>
           <Button startIcon={<AddIcon />} variant="contained" onClick={openCreateDataroom}>
             New dataroom
           </Button>
         </Toolbar>
       </AppBar>
 
-      <Box sx={{ p: { xs: 1.5, md: 2.5 } }}>
-        <Stack direction={{ xs: 'column', lg: 'row' }} spacing={2.5} alignItems="stretch">
-          <Paper sx={{ width: { xs: '100%', lg: 300 }, p: 1.25 }}>
+      <Box
+        sx={{
+          p: { xs: 1.5, md: 2.5 },
+          minHeight: { lg: 'calc(100vh - 96px)' },
+          display: 'flex',
+        }}
+      >
+        <Stack
+          direction={{ xs: 'column', lg: 'row' }}
+          spacing={2.5}
+          alignItems="stretch"
+          sx={{ flex: 1, minHeight: 0 }}
+        >
+          <Paper sx={{ width: { xs: '100%', lg: 300 }, p: 1.25, height: '100%' }}>
             <Stack spacing={1}>
               <Stack direction="row" alignItems="center" justifyContent="space-between">
                 <Typography variant="subtitle1">Datarooms</Typography>
@@ -415,7 +515,7 @@ const AppShell = ({ token, onSignOut }: { token: string; onSignOut: () => void }
             </Stack>
           </Paper>
 
-          <Paper sx={{ flex: 1, p: { xs: 1.25, md: 2 } }}>
+          <Paper sx={{ flex: 1, p: { xs: 1.25, md: 2 }, height: '100%', minWidth: 0 }}>
             {!activeDataroom ? (
               <Stack
                 spacing={2.5}
@@ -466,12 +566,21 @@ const AppShell = ({ token, onSignOut }: { token: string; onSignOut: () => void }
                     </Breadcrumbs>
                   </Box>
 
-                  <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                    <Button variant="outlined" startIcon={<AddIcon />} onClick={openCreateFolder}>
+                  <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap alignItems={'center'}>
+                    <Button variant="text" color="inherit" startIcon={<AddIcon />} onClick={openCreateFolder}>
                       New folder
                     </Button>
-                    <Button variant="outlined" startIcon={<DriveFolderUploadOutlinedIcon />} onClick={triggerFileDialog}>
+                    <Button variant="contained" startIcon={<DriveFolderUploadOutlinedIcon />} onClick={triggerFileDialog}>
                       Upload PDF
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      color="error"
+                      startIcon={<DeleteOutlineIcon />}
+                      disabled={selectedBulkKeys.length === 0}
+                      onClick={openDeleteSelectedItems}
+                    >
+                      Delete selected ({selectedBulkKeys.length})
                     </Button>
                     <input
                       ref={inputRef}
@@ -493,7 +602,7 @@ const AppShell = ({ token, onSignOut }: { token: string; onSignOut: () => void }
                     p: 1.5,
                     borderStyle: 'dashed',
                     borderColor: dragActive ? 'primary.main' : 'divider',
-                    bgcolor: dragActive ? '#edf4ff' : '#fbfdff',
+                    bgcolor: dragActive ? 'action.selected' : 'background.paper',
                   }}
                 >
                   <Typography variant="body2" color="text.secondary">
@@ -505,35 +614,59 @@ const AppShell = ({ token, onSignOut }: { token: string; onSignOut: () => void }
                 {contentsError ? <Alert severity="error">{contentsError.message}</Alert> : null}
 
                 {!contentsLoading && !contentsError ? (
-                  <DriveTable
-                    items={items}
-                    selectedItemKey={selectedItemKey}
-                    onSelect={selectDriveItem}
-                    onOpen={openDriveItem}
-                    onRename={renameDriveItem}
-                    onDelete={deleteDriveItem}
-                  />
+                  <Box
+                    sx={{
+                      minHeight: 0,
+                      minWidth: 0,
+                      display: 'grid',
+                      gap: 2,
+                      gridTemplateColumns: {
+                        xs: 'minmax(0,1fr)',
+                        xl: selectedFile ? 'minmax(0,1fr) minmax(340px,42%)' : 'minmax(0,1fr)',
+                      },
+                    }}
+                  >
+                    <Box sx={{ minWidth: 0 }}>
+                      <DriveTable
+                        items={items}
+                        selectedItemKey={selectedItemKey}
+                        selectedBulkKeys={selectedBulkKeys}
+                        sortBy={sortBy}
+                        sortDirection={sortDirection}
+                        filePage={filePage}
+                        filePageSize={filePageSize}
+                        fileTotal={filesTotal}
+                        onSortChange={onSortChange}
+                        onToggleItemSelection={onToggleItemSelection}
+                        onToggleAllVisibleItems={onToggleAllVisibleItems}
+                        onFilePageChange={setFilePage}
+                        onFilePageSizeChange={setFilePageSize}
+                        onSelect={selectDriveItem}
+                        onOpen={openDriveItem}
+                        onRename={renameDriveItem}
+                        onDelete={deleteDriveItem}
+                      />
+                    </Box>
+                    {selectedFile ? (
+                      <Paper variant="outlined" sx={{ width: '100%', p: 2, minHeight: { xs: 460, xl: 620 }, minWidth: 0 }}>
+                        <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
+                          <Typography variant="subtitle1">Preview</Typography>
+                          <IconButton size="small" onClick={() => setSelectedFile(null)}>
+                            <CloseIcon fontSize="small" />
+                          </IconButton>
+                        </Stack>
+                        <Box sx={{ height: 'calc(100% - 32px)' }}>
+                          <PdfPreview file={selectedFile} token={token} onDownload={downloadFile} />
+                        </Box>
+                      </Paper>
+                    ) : null}
+                  </Box>
                 ) : null}
               </Stack>
             )}
           </Paper>
         </Stack>
       </Box>
-
-      <Drawer
-        anchor="right"
-        open={Boolean(selectedFile)}
-        onClose={() => setSelectedFile(null)}
-        PaperProps={{ sx: { width: { xs: '100%', sm: 560 }, p: 2 } }}
-      >
-        <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
-          <Typography variant="subtitle1">Preview</Typography>
-          <IconButton size="small" onClick={() => setSelectedFile(null)}>
-            <CloseIcon fontSize="small" />
-          </IconButton>
-        </Stack>
-        {selectedFile ? <PdfPreview file={selectedFile} token={token} onDownload={downloadFile} /> : null}
-      </Drawer>
 
       {dialog ? (
         <DialogModal

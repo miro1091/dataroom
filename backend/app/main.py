@@ -5,7 +5,8 @@ from pydantic import BaseModel
 from sqlalchemy import inspect, select, text
 from sqlalchemy.exc import IntegrityError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
+from starlette.requests import ClientDisconnect
 from sqlalchemy.orm import Session
 from strawberry.fastapi import GraphQLRouter
 
@@ -25,6 +26,9 @@ async def db_session_middleware(request: Request, call_next):
     request.state.db = SessionLocal()
     try:
         response = await call_next(request)
+    except ClientDisconnect:
+        # Client aborted request (navigation/cancel). Avoid noisy traceback logs.
+        response = Response(status_code=499)
     finally:
         request.state.db.close()
     return response

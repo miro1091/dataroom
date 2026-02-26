@@ -124,11 +124,9 @@ export const AuthGate = ({ onSubmit }: AuthGateProps) => {
         display: 'grid',
         placeItems: 'center',
         p: 3,
-        background:
-          'radial-gradient(circle at 10% 0%, #dfe9ff 0%, transparent 35%), radial-gradient(circle at 90% 0%, #eaf4ff 0%, transparent 45%), #f4f7fc',
       }}
     >
-      <Paper elevation={0} sx={{ width: '100%', maxWidth: 420, p: 4, border: '1px solid', borderColor: 'divider' }}>
+      <Paper elevation={0} sx={{ width: '100%', maxWidth: 420, p: 4 }}>
         <Typography variant="h5" gutterBottom>
           Acme Dataroom
         </Typography>

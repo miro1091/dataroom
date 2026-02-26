@@ -1,5 +1,6 @@
+import { Alert, Button, Paper, Stack, Typography } from '@mui/material'
+import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined'
 import type { ApiFolder } from '../types/graphql'
-import { BUTTONS } from '../constants/ui'
 
 type FolderListProps = {
   folders: ApiFolder[]
@@ -10,32 +11,45 @@ type FolderListProps = {
 
 export const FolderList = ({ folders, onOpen, onRename, onDelete }: FolderListProps) => {
   if (folders.length === 0) {
-    return (
-      <div className="rounded-xl border border-dashed border-border bg-white/70 p-4 text-sm text-muted">
-        No folders here yet.
-      </div>
-    )
+    return <Alert severity="info">No folders here yet.</Alert>
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <Stack spacing={1.25}>
       {folders.map((folder) => (
-        <div key={folder.id} className="grid items-center gap-3 rounded-xl border border-border bg-surface p-4 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
-          <button className="flex items-center gap-3 text-left" onClick={() => onOpen(folder)}>
-            <span className="text-lg">📁</span>
-            <span className="font-sans text-sm font-semibold text-ink">{folder.name}</span>
-          </button>
-          <div className="text-xs text-muted">Updated {new Date(folder.updatedAt).toLocaleDateString()}</div>
-          <div className="flex flex-wrap gap-2">
-            <button className={BUTTONS.ghost} onClick={() => onRename(folder)}>
-              Rename
-            </button>
-            <button className={BUTTONS.ghostDanger} onClick={() => onDelete(folder)}>
-              Delete
-            </button>
-          </div>
-        </div>
+        <Paper key={folder.id} variant="outlined" sx={{ p: 1.25 }}>
+          <Stack
+            direction={{ xs: 'column', sm: 'row' }}
+            spacing={1.25}
+            alignItems={{ xs: 'stretch', sm: 'center' }}
+          >
+            <Button
+              variant="text"
+              color="inherit"
+              startIcon={<FolderOutlinedIcon />}
+              onClick={() => onOpen(folder)}
+              sx={{ justifyContent: 'flex-start', flex: 1, textTransform: 'none' }}
+            >
+              <Stack spacing={0.25} alignItems="flex-start">
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                  {folder.name}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Updated {new Date(folder.updatedAt).toLocaleDateString()}
+                </Typography>
+              </Stack>
+            </Button>
+            <Stack direction="row" spacing={1}>
+              <Button size="small" onClick={() => onRename(folder)}>
+                Rename
+              </Button>
+              <Button size="small" color="error" onClick={() => onDelete(folder)}>
+                Delete
+              </Button>
+            </Stack>
+          </Stack>
+        </Paper>
       ))}
-    </div>
+    </Stack>
   )
 }

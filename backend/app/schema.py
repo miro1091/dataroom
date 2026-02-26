@@ -6,7 +6,7 @@ from typing import List, Optional
 import strawberry
 from strawberry.schema.config import StrawberryConfig
 from graphql import GraphQLError
-from sqlalchemy import select
+from sqlalchemy import Integer, String, asc, desc, literal, select, union_all
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -15,6 +15,11 @@ from strawberry.file_uploads import Upload
 from .models import Dataroom, File, Folder, User
 from .redis_client import cache_delete, cache_get, cache_set
 from .storage import UploadValidationError, delete_file, save_upload
+
+ALLOWED_FILE_PAGE_SIZES = {10, 20, 50}
+DEFAULT_FILE_PAGE_SIZE = 20
+ALLOWED_SORT_FIELDS = {"name", "type", "size", "createdAt", "updatedAt"}
+ALLOWED_SORT_DIRECTIONS = {"asc", "desc"}
 
 
 def _iso(dt: datetime) -> str:
@@ -59,11 +64,21 @@ def _cache_key_datarooms(user_id: int) -> str:
 
 
 def _cache_key_folder_contents(
-    user_id: int, dataroom_id: int, parent_id: Optional[int], search: Optional[str]
+    user_id: int,
+    dataroom_id: int,
+    parent_id: Optional[int],
+    search: Optional[str],
+    sort_by: str,
+    sort_direction: str,
+    file_offset: int,
+    file_limit: int,
 ) -> str:
     suffix = "root" if parent_id is None else str(parent_id)
     search_token = (search or "").strip().lower() or "all"
-    return f"user:{user_id}:dataroom:{dataroom_id}:folder:{suffix}:search:{search_token}"
+    return (
+        f"user:{user_id}:dataroom:{dataroom_id}:folder:v2:{suffix}:search:{search_token}:"
+        f"sort:{sort_by}:{sort_direction}:offset:{file_offset}:limit:{file_limit}"
+    )
 
 
 def _invalidate_dataroom_cache(user_id: int) -> None:
@@ -161,6 +176,38 @@ def _collect_descendant_folder_ids(db: Session, root_id: int) -> List[int]:
     return ids
 
 
+def _normalize_sort(sort_by: Optional[str], sort_direction: Optional[str]) -> tuple[str, str]:
+    normalized_sort_by = (sort_by or "name").strip()
+    if normalized_sort_by not in ALLOWED_SORT_FIELDS:
+        normalized_sort_by = "name"
+
+    normalized_sort_direction = (sort_direction or "asc").strip().lower()
+    if normalized_sort_direction not in ALLOWED_SORT_DIRECTIONS:
+        normalized_sort_direction = "asc"
+
+    return normalized_sort_by, normalized_sort_direction
+
+
+def _normalize_file_limit(file_limit: int) -> int:
+    return file_limit if file_limit in ALLOWED_FILE_PAGE_SIZES else DEFAULT_FILE_PAGE_SIZE
+
+
+def _apply_direction(column, direction: str):
+    return desc(column) if direction == "desc" else asc(column)
+
+
+def _combined_sort_column(combined_query, sort_by: str):
+    if sort_by == "createdAt":
+        return combined_query.c.created_at
+    if sort_by == "updatedAt":
+        return combined_query.c.updated_at
+    if sort_by == "size":
+        return combined_query.c.size
+    if sort_by == "type":
+        return combined_query.c.content_type
+    return combined_query.c.name
+
+
 @strawberry.type(name="Dataroom")
 class DataroomType:
     id: int
@@ -201,8 +248,25 @@ class FileType:
 
 @strawberry.type(name="FolderContents")
 class FolderContentsType:
+    items: List["DriveListItemType"]
     folders: List[FolderType]
     files: List[FileType]
+    files_total: int
+    files_has_more: bool
+    file_offset: int
+    file_limit: int
+
+
+@strawberry.type(name="DriveListItem")
+class DriveListItemType:
+    key: str
+    kind: str
+    id: int
+    name: str
+    size: Optional[int]
+    content_type: Optional[str]
+    created_at: str
+    updated_at: str
 
 
 @strawberry.type(name="SearchFileResult")
@@ -261,6 +325,10 @@ class Query:
         dataroom_id: int,
         parent_id: Optional[int] = None,
         search: Optional[str] = None,
+        sort_by: Optional[str] = None,
+        sort_direction: Optional[str] = None,
+        file_offset: int = 0,
+        file_limit: int = DEFAULT_FILE_PAGE_SIZE,
     ) -> FolderContentsType:
         db: Session = info.context["db"]
         user = _get_user(info)
@@ -271,39 +339,174 @@ class Query:
                 raise GraphQLError("Folder does not belong to this dataroom.")
 
         search_term = (search or "").strip()
-        cache_key = _cache_key_folder_contents(user.id, dataroom_id, parent_id, search_term)
+        normalized_sort_by, normalized_sort_direction = _normalize_sort(sort_by, sort_direction)
+        safe_file_offset = max(file_offset, 0)
+        safe_file_limit = _normalize_file_limit(file_limit)
+        cache_key = _cache_key_folder_contents(
+            user.id,
+            dataroom_id,
+            parent_id,
+            search_term,
+            normalized_sort_by,
+            normalized_sort_direction,
+            safe_file_offset,
+            safe_file_limit,
+        )
         cached = cache_get(cache_key)
         if cached is not None:
+            cached_items = cached.get("items")
+            if cached_items is None:
+                cached_items = [
+                    {
+                        "key": f"folder-{item['id']}",
+                        "kind": "folder",
+                        "id": item["id"],
+                        "name": item["name"],
+                        "size": None,
+                        "content_type": None,
+                        "created_at": item["created_at"],
+                        "updated_at": item["updated_at"],
+                    }
+                    for item in cached.get("folders", [])
+                ] + [
+                    {
+                        "key": f"file-{item['id']}",
+                        "kind": "file",
+                        "id": item["id"],
+                        "name": item["name"],
+                        "size": item["size"],
+                        "content_type": item["content_type"],
+                        "created_at": item["created_at"],
+                        "updated_at": item["updated_at"],
+                    }
+                    for item in cached.get("files", [])
+                ]
             return FolderContentsType(
+                items=[DriveListItemType(**item) for item in cached_items],
                 folders=[FolderType(**item) for item in cached["folders"]],
                 files=[FileType(**item) for item in cached["files"]],
+                files_total=cached["files_total"],
+                files_has_more=cached["files_has_more"],
+                file_offset=cached["file_offset"],
+                file_limit=cached["file_limit"],
             )
 
-        folders = (
-            db.execute(
-                select(Folder)
-                .where(Folder.dataroom_id == dataroom_id, Folder.parent_id == parent_id)
-                .order_by(Folder.name.asc())
-            )
-            .scalars()
-            .all()
-        )
-        file_stmt = (
-            select(File)
-            .where(File.dataroom_id == dataroom_id, File.folder_id == parent_id)
-            .order_by(File.name.asc())
-        )
+        folder_stmt = select(
+            literal("folder").label("kind"),
+            Folder.id.label("id"),
+            Folder.name.label("name"),
+            literal(None, type_=Integer).label("size"),
+            literal(None, type_=String).label("content_type"),
+            Folder.created_at.label("created_at"),
+            Folder.updated_at.label("updated_at"),
+        ).where(Folder.dataroom_id == dataroom_id, Folder.parent_id == parent_id)
+        file_stmt = select(
+            literal("file").label("kind"),
+            File.id.label("id"),
+            File.name.label("name"),
+            File.size.label("size"),
+            File.content_type.label("content_type"),
+            File.created_at.label("created_at"),
+            File.updated_at.label("updated_at"),
+        ).where(File.dataroom_id == dataroom_id, File.folder_id == parent_id)
         if search_term:
+            folder_stmt = folder_stmt.where(Folder.name.ilike(f"%{search_term}%"))
             file_stmt = file_stmt.where(File.name.ilike(f"%{search_term}%"))
-        files = db.execute(file_stmt).scalars().all()
+
+        combined_query = union_all(folder_stmt, file_stmt).subquery()
+        total_items = db.execute(select(func.count()).select_from(combined_query)).scalar_one()
+        primary_sort = _apply_direction(
+            _combined_sort_column(combined_query, normalized_sort_by),
+            normalized_sort_direction,
+        )
+        if normalized_sort_by in {"size", "type"}:
+            primary_sort = (
+                primary_sort.nulls_last()
+                if normalized_sort_direction == "asc"
+                else primary_sort.nulls_first()
+            )
+
+        rows = db.execute(
+            select(
+                combined_query.c.kind,
+                combined_query.c.id,
+                combined_query.c.name,
+                combined_query.c.size,
+                combined_query.c.content_type,
+                combined_query.c.created_at,
+                combined_query.c.updated_at,
+            )
+            .order_by(
+                primary_sort,
+                combined_query.c.name.asc(),
+                combined_query.c.id.asc(),
+            )
+            .offset(safe_file_offset)
+            .limit(safe_file_limit)
+        ).all()
+
+        items_payload = []
+        folders_payload = []
+        files_payload = []
+        for row in rows:
+            created_at = _iso(row.created_at)
+            updated_at = _iso(row.updated_at)
+            items_payload.append(
+                {
+                    "key": f"{row.kind}-{row.id}",
+                    "kind": row.kind,
+                    "id": row.id,
+                    "name": row.name,
+                    "size": row.size,
+                    "content_type": row.content_type,
+                    "created_at": created_at,
+                    "updated_at": updated_at,
+                }
+            )
+            if row.kind == "folder":
+                folders_payload.append(
+                    {
+                        "id": row.id,
+                        "dataroom_id": dataroom_id,
+                        "parent_id": parent_id,
+                        "name": row.name,
+                        "created_at": created_at,
+                        "updated_at": updated_at,
+                    }
+                )
+            else:
+                files_payload.append(
+                    {
+                        "id": row.id,
+                        "dataroom_id": dataroom_id,
+                        "folder_id": parent_id,
+                        "name": row.name,
+                        "size": row.size or 0,
+                        "content_type": row.content_type or "application/octet-stream",
+                        "created_at": created_at,
+                        "updated_at": updated_at,
+                    }
+                )
+
+        has_more_files = safe_file_offset + len(rows) < total_items
         payload = {
-            "folders": [_folder_dict(item) for item in folders],
-            "files": [_file_dict(item) for item in files],
+            "items": items_payload,
+            "folders": folders_payload,
+            "files": files_payload,
+            "files_total": total_items,
+            "files_has_more": has_more_files,
+            "file_offset": safe_file_offset,
+            "file_limit": safe_file_limit,
         }
         cache_set(cache_key, payload)
         return FolderContentsType(
+            items=[DriveListItemType(**item) for item in payload["items"]],
             folders=[FolderType(**item) for item in payload["folders"]],
             files=[FileType(**item) for item in payload["files"]],
+            files_total=payload["files_total"],
+            files_has_more=payload["files_has_more"],
+            file_offset=payload["file_offset"],
+            file_limit=payload["file_limit"],
         )
 
     @strawberry.field
@@ -553,6 +756,37 @@ class Mutation:
         db.commit()
         _invalidate_folder_cache(user.id, dataroom_id)
         return True
+
+    @strawberry.mutation
+    def delete_files(self, info, ids: List[int]) -> int:
+        db: Session = info.context["db"]
+        user = _get_user(info)
+        unique_ids = sorted({file_id for file_id in ids if file_id > 0})
+        if not unique_ids:
+            return 0
+
+        records = (
+            db.execute(
+                select(File)
+                .join(Dataroom, File.dataroom_id == Dataroom.id)
+                .where(File.id.in_(unique_ids), Dataroom.user_id == user.id)
+            )
+            .scalars()
+            .all()
+        )
+        if len(records) != len(unique_ids):
+            raise GraphQLError("One or more files could not be deleted.")
+
+        dataroom_ids = set()
+        for record in records:
+            dataroom_ids.add(record.dataroom_id)
+            delete_file(record.storage_path)
+            db.delete(record)
+
+        db.commit()
+        for dataroom_id in dataroom_ids:
+            _invalidate_folder_cache(user.id, dataroom_id)
+        return len(records)
 
 
 schema = strawberry.Schema(
